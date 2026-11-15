@@ -10,7 +10,7 @@ On launch the app searches Google for **cat**, then opens the first organic resu
 
 ```bash
 xcodebuild -project MindfullySocial.xcodeproj -scheme MindfullySocial \
-  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
   -derivedDataPath ./DerivedData \
   test
 ```
