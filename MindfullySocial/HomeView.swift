@@ -21,9 +21,9 @@ struct HomeView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     Text("Mindfully Social")
-                        .font(.system(size: 36, weight: .bold, design: .default))
+                        .font(.system(size: 28, weight: .bold, design: .default))
                         .foregroundStyle(HomePalette.primaryText)
-                        .tracking(-0.6)
+                        .tracking(-0.3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("appTitle")
 
