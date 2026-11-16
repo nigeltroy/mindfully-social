@@ -12,22 +12,13 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 28) {
-                    HStack(spacing: 12) {
-                        Image("AppLogo")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 44, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .accessibilityHidden(true)
-
-                        Text("Mindfully Social")
-                            .font(.system(size: 28, weight: .bold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .accessibilityIdentifier("appTitle")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 12)
+                    Text("Mindfully Social")
+                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .accessibilityIdentifier("appTitle")
 
                     LazyVGrid(columns: columns, spacing: 28) {
                         ForEach(Site.all) { site in

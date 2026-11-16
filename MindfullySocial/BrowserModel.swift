@@ -13,9 +13,13 @@ final class BrowserModel: ObservableObject {
 
     init() {
         let config = WKWebViewConfiguration()
+        // Persist cookies/localStorage across force-quit via WebKit's default store.
+        // Do not use WKWebsiteDataStore.nonPersistent().
+        config.websiteDataStore = .default
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.allowsBackForwardNavigationGestures = true
+        wv.scrollView.contentInsetAdjustmentBehavior = .never
         self.webView = wv
 
         observations.append(wv.observe(\.title, options: [.new]) { [weak self] webView, _ in

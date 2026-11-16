@@ -53,8 +53,11 @@ struct SiteBrowserView: View {
             .background(Color(white: 0.12))
 
             WebView(model: model)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: .bottom)
                 .accessibilityIdentifier("browserWebView")
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear {
