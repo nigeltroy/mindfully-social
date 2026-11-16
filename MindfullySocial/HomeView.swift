@@ -10,7 +10,6 @@ private enum HomePalette {
     static let secondaryText = Color(white: 0.58)
     static let tertiaryText = Color(white: 0.42)
     static let gearFill = Color.white.opacity(0.08)
-    static let rowDivider = Color.white.opacity(0.07)
 }
 
 struct HomeView: View {
@@ -28,30 +27,24 @@ struct HomeView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityIdentifier("appTitle")
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(Site.all.enumerated()), id: \.element.id) { index, site in
+                    VStack(spacing: 12) {
+                        ForEach(Site.all) { site in
                             SiteRowView(
                                 site: site,
                                 usage: UsageTimeStore.daily(for: site.id),
                                 onOpen: { selectedSite = site },
                                 onSettings: { settingsSite = site }
                             )
-                            if index < Site.all.count - 1 {
-                                Rectangle()
-                                    .fill(HomePalette.rowDivider)
-                                    .frame(height: 1)
-                                    .padding(.leading, 72)
-                            }
+                            .background(
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .fill(HomePalette.surface)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                    .strokeBorder(HomePalette.surfaceStroke, lineWidth: 1)
+                            )
                         }
                     }
-                    .background(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .fill(HomePalette.surface)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 22, style: .continuous)
-                            .strokeBorder(HomePalette.surfaceStroke, lineWidth: 1)
-                    )
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
