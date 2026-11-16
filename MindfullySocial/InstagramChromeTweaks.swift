@@ -208,17 +208,16 @@ enum InstagramChromeTweaks {
         var p = pathOf(link);
         if (isExactReelsPath(p) && !isDirectPath(p)) {
           var slot = climbToDirectChild(link, container);
-          slot.setAttribute('data-msa-reels-target', '1');
-          slot.style.setProperty('display', 'none', 'important');
-          slot.style.setProperty('flex', '0 0 0', 'important');
-          slot.style.setProperty('width', '0', 'important');
-          slot.style.setProperty('min-width', '0', 'important');
-          slot.style.setProperty('max-width', '0', 'important');
-          slot.style.setProperty('padding', '0', 'important');
-          slot.style.setProperty('margin', '0', 'important');
-          slot.style.setProperty('overflow', 'hidden', 'important');
-          link.setAttribute('aria-hidden', 'true');
-          link.setAttribute('tabindex', '-1');
+          // Remove the slot entirely — display:none left a flex/grid hole
+          // between Search and Messages.
+          try {
+            slot.remove();
+          } catch (err) {
+            slot.setAttribute('data-msa-reels-target', '1');
+            slot.style.setProperty('display', 'none', 'important');
+            slot.style.setProperty('flex', '0 0 0', 'important');
+            slot.style.setProperty('width', '0', 'important');
+          }
           continue;
         }
         keep.push(child);
