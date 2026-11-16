@@ -4,7 +4,7 @@ import WebKit
 /// Launch-arg helpers to prove WKWebsiteDataStore.default cookie persistence
 /// without Instagram/YouTube credentials.
 ///
-/// -SeedPersistCookie  → write distinguishable cookie, then exit path continues
+/// -SeedPersistCookie  → write distinguishable cookie
 /// -CheckPersistCookie → read cookie; write Documents/msa-persist-probe.txt
 enum PersistProbe {
     static let cookieName = "msa_persist_probe"
@@ -35,28 +35,22 @@ enum PersistProbe {
             .expires: Date().addingTimeInterval(60 * 60 * 24 * 30),
         ])!
 
-        let semaphore = DispatchSemaphore(value: 0)
+        // Avoid main-thread semaphore deadlock: completion may hop to main.
         store.httpCookieStore.setCookie(cookie) {
-            semaphore.signal()
+            writeReport("seeded isPersistent=\(store.isPersistent) cookie=\(cookieName)")
         }
-        _ = semaphore.wait(timeout: .now() + 5)
-        writeReport("seeded isPersistent=\(store.isPersistent) cookie=\(cookieName)")
     }
 
     private static func checkCookie() {
         let store = WKWebsiteDataStore.default()
-        let semaphore = DispatchSemaphore(value: 0)
-        var found = false
         store.httpCookieStore.getAllCookies { cookies in
-            found = cookies.contains {
+            let found = cookies.contains {
                 $0.name == cookieName && $0.value == cookieValue && $0.domain.contains(cookieDomain)
             }
-            semaphore.signal()
+            writeReport(
+                "check isPersistent=\(store.isPersistent) found=\(found) cookie=\(cookieName)"
+            )
         }
-        _ = semaphore.wait(timeout: .now() + 5)
-        writeReport(
-            "check isPersistent=\(store.isPersistent) found=\(found) cookie=\(cookieName)"
-        )
     }
 
     private static func writeReport(_ line: String) {
