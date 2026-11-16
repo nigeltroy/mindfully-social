@@ -51,19 +51,25 @@ final class BrowserModel: ObservableObject {
         })
     }
 
-    /// Site-specific WKUserScripts (Instagram Reels hide). Safe to call once before load.
+    /// Site-specific WKUserScripts (Instagram Reels nav + feed-ad hide). Safe once before load.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
 
         guard siteID == "instagram" else { return }
 
-        let script = WKUserScript(
-            source: InstagramChromeTweaks.userScriptSource,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
-        )
-        webView.configuration.userContentController.addUserScript(script)
+        let sources = [
+            InstagramChromeTweaks.userScriptSource,
+            InstagramChromeTweaks.feedHideUserScriptSource
+        ]
+        for source in sources {
+            let script = WKUserScript(
+                source: source,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false
+            )
+            webView.configuration.userContentController.addUserScript(script)
+        }
     }
 
     func load(url: URL) {
