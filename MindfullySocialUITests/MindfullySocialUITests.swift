@@ -396,3 +396,105 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 6)
 }
 }
+
+
+    /// Fresh-simulator Instagram login only (for iPhone 17e / isolated sims).
+    @MainActor
+    func testInstagramLoginOnly() throws {
+        let env = ProcessInfo.processInfo.environment
+        guard
+            let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
+            let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty
+        else {
+            throw XCTSkip("INSTAGRAM_USERNAME / INSTAGRAM_PASSWORD not set")
+        }
+
+        let app = XCUIApplication()
+        app.launchArguments = ["-OpenSite", "instagram"]
+        app.launch()
+
+        let close = app.buttons["browserCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        Thread.sleep(forTimeInterval: 8)
+
+        func dismissAlerts(times: Int = 5) {
+            for _ in 0..<times {
+                let alertOK = app.alerts.buttons["OK"]
+                if alertOK.waitForExistence(timeout: 1) {
+                    alertOK.tap()
+                    Thread.sleep(forTimeInterval: 0.3)
+                } else { break }
+            }
+            let notNow = app.buttons["Not Now"]
+            if notNow.waitForExistence(timeout: 1) { notNow.tap() }
+        }
+        dismissAlerts()
+
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 10))
+
+        let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+        let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
+        if loginLink.waitForExistence(timeout: 4), loginLink.isHittable {
+            loginLink.tap()
+            Thread.sleep(forTimeInterval: 3)
+            dismissAlerts()
+        }
+
+        func clearAndType(_ field: XCUIElement, text: String) {
+            field.tap()
+            Thread.sleep(forTimeInterval: 0.3)
+            if let current = field.value as? String, !current.isEmpty {
+                let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2)
+                field.typeText(delete)
+            } else {
+                field.press(forDuration: 1.0)
+                let selectAll = app.menuItems["Select All"]
+                if selectAll.waitForExistence(timeout: 2) {
+                    selectAll.tap()
+                    field.typeText(XCUIKeyboardKey.delete.rawValue)
+                }
+            }
+            field.typeText(text)
+        }
+
+        let userField = web.textFields.firstMatch
+        XCTAssertTrue(userField.waitForExistence(timeout: 12), "username field missing")
+        clearAndType(userField, text: username)
+
+        let passField = web.secureTextFields.firstMatch
+        if passField.waitForExistence(timeout: 8) {
+            clearAndType(passField, text: password)
+        } else {
+            let anyPass = web.textFields.element(boundBy: 1)
+            XCTAssertTrue(anyPass.waitForExistence(timeout: 5), "password field missing")
+            clearAndType(anyPass, text: password)
+        }
+
+        let formShot = app.screenshot()
+        let formAtt = XCTAttachment(screenshot: formShot)
+        formAtt.name = "login-form"
+        formAtt.lifetime = .keepAlways
+        add(formAtt)
+
+        dismissAlerts()
+        let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
+        var tapped = false
+        if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
+            loginBtn.tap(); tapped = true
+        }
+        if !tapped {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
+        }
+
+        Thread.sleep(forTimeInterval: 14)
+        dismissAlerts()
+        Thread.sleep(forTimeInterval: 6)
+
+        let resultShot = app.screenshot()
+        let resultAtt = XCTAttachment(screenshot: resultShot)
+        resultAtt.name = "login-result"
+        resultAtt.lifetime = .keepAlways
+        add(resultAtt)
+    }
+
