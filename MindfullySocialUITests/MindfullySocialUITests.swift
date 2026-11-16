@@ -209,11 +209,8 @@ final class MindfullySocialUITests: XCTestCase {
     @MainActor
     func testInstagramSearchHidesReels() throws {
         let app = XCUIApplication()
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/explore/",
-            "-DumpIGExplore"
-        ]
+        // Open Instagram home first so we can log in on a fresh simulator.
+        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGExplore"]
         app.launch()
 
         let close = app.buttons["browserCloseButton"]
@@ -235,36 +232,77 @@ final class MindfullySocialUITests: XCTestCase {
         }
         dismissAlerts()
 
-        // If bounced to login, fill via XCUITest keyboard (never log secrets).
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 10))
         let env = ProcessInfo.processInfo.environment
-        let userField = web.textFields.firstMatch
-        if userField.waitForExistence(timeout: 3),
-           let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
-           let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty {
-            func clearAndType(_ field: XCUIElement, text: String) {
-                field.tap()
-                Thread.sleep(forTimeInterval: 0.25)
-                if let current = field.value as? String, !current.isEmpty {
-                    let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2)
-                    field.typeText(delete)
-                }
-                field.typeText(text)
+
+        func clearAndType(_ field: XCUIElement, text: String) {
+            field.tap()
+            Thread.sleep(forTimeInterval: 0.25)
+            if let current = field.value as? String, !current.isEmpty {
+                let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2)
+                field.typeText(delete)
             }
+            field.typeText(text)
+        }
+
+        func attemptLoginIfNeeded() {
+            guard
+                let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
+                let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty
+            else { return }
+
+            // Logged-out explore/home often shows a Log in link before fields.
+            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+            let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
+            if loginLink.waitForExistence(timeout: 3), loginLink.isHittable {
+                loginLink.tap()
+                Thread.sleep(forTimeInterval: 3)
+                dismissAlerts()
+            }
+
+            let userField = web.textFields.firstMatch
+            guard userField.waitForExistence(timeout: 8) else { return }
             clearAndType(userField, text: username)
             let passField = web.secureTextFields.firstMatch
             if passField.waitForExistence(timeout: 5) {
                 clearAndType(passField, text: password)
+            } else {
+                let anyPass = web.textFields.element(boundBy: 1)
+                if anyPass.waitForExistence(timeout: 3) {
+                    clearAndType(anyPass, text: password)
+                }
             }
-            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+            dismissAlerts()
             let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
             if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
                 loginBtn.tap()
+            } else {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
             }
-            Thread.sleep(forTimeInterval: 12)
+            Thread.sleep(forTimeInterval: 14)
             dismissAlerts()
-            // Re-enter explore after login.
+        }
+
+        attemptLoginIfNeeded()
+
+        // Navigate to Explore after login (or if already logged in).
+        app.terminate()
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/explore/",
+            "-DumpIGExplore"
+        ]
+        app.launch()
+        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        Thread.sleep(forTimeInterval: 8)
+        dismissAlerts()
+        // If still logged out on explore, login once more then reopen explore.
+        let stillLogin = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label ==[c] %@", "Log in")
+        ).firstMatch
+        if stillLogin.waitForExistence(timeout: 2) {
+            attemptLoginIfNeeded()
             app.terminate()
             app.launchArguments = [
                 "-OpenSite", "instagram",
