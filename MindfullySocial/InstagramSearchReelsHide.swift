@@ -252,21 +252,41 @@ enum InstagramSearchReelsHide {
 
   window.__msaDumpExploreReels = function () {
     var tiles = [];
+    var hiddenTiles = [];
     var anchors = document.querySelectorAll('a[href]');
-    for (var i = 0; i < Math.min(anchors.length, 400); i++) {
+    for (var i = 0; i < Math.min(anchors.length, 500); i++) {
       var a = anchors[i];
       var p = pathOf(a);
       if (!(isReelPath(p) || /\/p\//.test(p) || /\/reel\//.test(p))) continue;
       var r = a.getBoundingClientRect();
-      if (r.width < 4 && r.height < 4) continue;
-      tiles.push({
+      var hidden = !!(a.closest && a.closest('[' + ATTR + '="1"]'));
+      var entry = {
         href: p,
         reel: isReelPath(p),
-        hidden: !!(a.closest && a.closest('[' + ATTR + '="1"]')),
+        hidden: hidden,
+        hrefRaw: (a.getAttribute('href') || '').slice(0, 120),
         label: (a.getAttribute('aria-label') || '').slice(0, 80),
+        badge: textBlob(a).slice(0, 80),
         w: Math.round(r.width),
         h: Math.round(r.height),
         y: Math.round(r.top)
+      };
+      if (hidden) hiddenTiles.push(entry);
+      if (r.width >= 4 && r.height >= 4) tiles.push(entry);
+    }
+    var bottomNav = [];
+    var allA = document.querySelectorAll('a[href]');
+    for (var j = 0; j < allA.length; j++) {
+      var b = allA[j];
+      var br = b.getBoundingClientRect();
+      if (br.bottom < window.innerHeight - 120) continue;
+      if (br.top < window.innerHeight - 200) continue;
+      if (br.width < 20 || br.height < 20) continue;
+      bottomNav.push({
+        href: pathOf(b),
+        hrefRaw: (b.getAttribute('href') || '').slice(0, 120),
+        label: ((b.getAttribute('aria-label') || '') + ' ' + textBlob(b)).replace(/\s+/g, ' ').trim().slice(0, 60),
+        x: Math.round(br.left)
       });
     }
     return JSON.stringify({
@@ -274,6 +294,8 @@ enum InstagramSearchReelsHide {
       exploreContext: isExploreOrSearchContext(),
       hiddenCount: document.querySelectorAll('[' + ATTR + '="1"]').length,
       sectionHidden: document.querySelectorAll('[' + ATTR_SECTION + '="1"]').length,
+      bottomNav: bottomNav,
+      hiddenTiles: hiddenTiles.slice(0, 40),
       tiles: tiles.slice(0, 80)
     });
   };
