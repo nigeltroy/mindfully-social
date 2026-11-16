@@ -202,9 +202,13 @@ extension InstagramChromeTweaks {
       var el = nodes[i];
       var raw = leafishText(el);
       var reason = matchLabel(raw);
-      if (!reason && el.childElementCount === 0) {
-        reason = matchLabel(el.textContent || '');
-        raw = el.textContent || '';
+      if (!reason) {
+        // Short full textContent (e.g. nested “Ad” span wrappers).
+        var full = el.textContent || '';
+        if (normText(full).length > 0 && normText(full).length <= 24) {
+          reason = matchLabel(full);
+          if (reason) raw = full;
+        }
       }
       if (!reason) continue;
       if (isInBottomNav(el)) continue;
@@ -218,24 +222,34 @@ extension InstagramChromeTweaks {
     if (article.querySelector('[data-ad-preview="message"], [data-ad-rendering-role], [data-ad-media]')) {
       return true;
     }
-    // Header strip only — avoid caption false positives.
+    // First ~160 chars of article text often contain “Ad” / “Sponsored” in the header.
+    var head = normText((article.innerText || '').slice(0, 160));
+    if (/(^|[^a-z])ad([^a-z]|$)/.test(head) || head.indexOf('sponsored') !== -1 ||
+        head.indexOf('paid partnership') !== -1) {
+      return true;
+    }
+    // Header strip node walk — avoid caption false positives deeper in the post.
     var headerBudget = 0;
     var nodes = article.querySelectorAll('span, a, div, h1, h2, h3');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      var raw = leafishText(el) || (el.childElementCount === 0 ? (el.textContent || '') : '');
+      var raw = leafishText(el);
+      if (!raw) {
+        var full = el.textContent || '';
+        if (normText(full).length > 0 && normText(full).length <= 24) raw = full;
+      }
       var t = normText(raw);
       if (!t || t.length > 24) continue;
       try {
         var lr = el.getBoundingClientRect();
         var ar = article.getBoundingClientRect();
-        if (ar.height > 0 && (lr.top - ar.top) > 140) continue;
+        if (ar.height > 0 && (lr.top - ar.top) > 160) continue;
       } catch (e) {}
       if (t === 'ad' || t === 'sponsored' || t === 'promoted' || t.indexOf('paid partnership') === 0) {
         return true;
       }
       headerBudget++;
-      if (headerBudget > 80) break;
+      if (headerBudget > 100) break;
     }
     return false;
   }
