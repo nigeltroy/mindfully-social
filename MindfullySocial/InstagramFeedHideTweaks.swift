@@ -254,6 +254,12 @@ extension InstagramChromeTweaks {
     return false;
   }
 
+  function articleLooksSuggested(article) {
+    var head = normText((article.innerText || '').slice(0, 180));
+    return head.indexOf('suggested for you') !== -1 ||
+      head.indexOf('suggestions for you') !== -1;
+  }
+
   function scanArticlesForAdAttrs(root) {
     var scope = root || document;
     var articles = scope.querySelectorAll ? scope.querySelectorAll('article') : [];
@@ -261,7 +267,8 @@ extension InstagramChromeTweaks {
     for (var i = 0; i < articles.length; i++) {
       var a = articles[i];
       if (a.getAttribute(FEED_MARK) === '1') continue;
-      if (articleLooksSponsored(a)) out.push(a);
+      if (articleLooksSponsored(a)) out.push({ el: a, reason: 'ad-attr' });
+      else if (articleLooksSuggested(a)) out.push({ el: a, reason: 'suggested-article' });
     }
     return out;
   }
@@ -326,11 +333,12 @@ extension InstagramChromeTweaks {
 
       var adArticles = scanArticlesForAdAttrs(document);
       for (var j = 0; j < adArticles.length; j++) {
-        if (collapseUnit(adArticles[j], 'ad-attr')) {
+        var item = adArticles[j];
+        if (collapseUnit(item.el, item.reason)) {
           hiddenNow++;
           if (window.__msaFeedHide) {
             window.__msaFeedHide.stats.hidden += 1;
-            window.__msaFeedHide.stats.lastReasons.push('ad-attr');
+            window.__msaFeedHide.stats.lastReasons.push(item.reason);
           }
         }
       }
@@ -364,6 +372,28 @@ extension InstagramChromeTweaks {
       for (var j = 0; j < marked.length; j++) {
         reasons.push(marked[j].getAttribute(FEED_REASON) || '?');
       }
+      var articleDiag = [];
+      try {
+        var arts = document.querySelectorAll('article');
+        for (var k = 0; k < Math.min(arts.length, 6); k++) {
+          var head = normText((arts[k].innerText || '').slice(0, 160));
+          articleDiag.push({
+            sponsored: articleLooksSponsored(arts[k]),
+            head: head.slice(0, 120),
+            adRegex: /(^|[^a-z])ad([^a-z]|$)/.test(head),
+            suggested: head.indexOf('suggested for you') !== -1 || head.indexOf('suggestions for you') !== -1
+          });
+        }
+      } catch (e) {
+        articleDiag.push({ error: String(e) });
+      }
+      // Force one apply pass before returning counts.
+      try { applyFeedHide(); } catch (e2) {}
+      marked = document.querySelectorAll('[' + FEED_MARK + '="1"]');
+      reasons = [];
+      for (var m = 0; m < marked.length; m++) {
+        reasons.push(marked[m].getAttribute(FEED_REASON) || '?');
+      }
       return {
         enabled: this.enabled,
         stats: this.stats,
@@ -371,13 +401,15 @@ extension InstagramChromeTweaks {
         markedCount: marked.length,
         markedReasons: reasons,
         liveLabelHits: labels,
+        articleDiag: articleDiag,
+        scriptCanary: 'feedhide-v3',
         path: location.pathname,
         sampleText: (function () {
           try {
-            var arts = document.querySelectorAll('article');
+            var arts2 = document.querySelectorAll('article');
             var chunks = [];
-            for (var k = 0; k < Math.min(arts.length, 4); k++) {
-              chunks.push((arts[k].innerText || '').replace(/\s+/g, ' ').slice(0, 220));
+            for (var n = 0; n < Math.min(arts2.length, 4); n++) {
+              chunks.push((arts2[n].innerText || '').replace(/\s+/g, ' ').slice(0, 220));
             }
             return chunks;
           } catch (e) { return []; }
