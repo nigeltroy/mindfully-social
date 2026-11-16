@@ -54,6 +54,7 @@ struct SiteBrowserView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             model.installSiteTweaks(for: site.id)
+            model.startFeedHideProbeIfRequested()
             UsageTimeStore.beginSession(for: site.id)
             refreshUsage()
             startUsageTicker()
