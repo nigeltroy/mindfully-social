@@ -1,18 +1,14 @@
 import SwiftUI
 
 private enum HomePalette {
-    /// Soft deep charcoal (not pure black).
-    static let backgroundTop = Color(red: 0.09, green: 0.11, blue: 0.09)
-    static let backgroundBottom = Color(red: 0.05, green: 0.06, blue: 0.05)
+    /// Soft dark gray (not pure black).
+    static let background = Color(white: 0.11)
     /// Elevated inset surface for the destination group.
-    static let surface = Color(white: 0.14)
+    static let surface = Color(white: 0.16)
     static let surfaceStroke = Color.white.opacity(0.06)
-    /// Soft near-white primary.
     static let primaryText = Color(white: 0.93)
     static let secondaryText = Color(white: 0.58)
     static let tertiaryText = Color(white: 0.42)
-    /// N1e grass green (sampled), softened for dark UI.
-    static let brandGreen = Color(red: 0.22, green: 0.72, blue: 0.18)
     static let brandGreenSoft = Color(red: 0.22, green: 0.72, blue: 0.18).opacity(0.18)
     static let gearFill = Color.white.opacity(0.08)
     static let rowDivider = Color.white.opacity(0.07)
@@ -25,15 +21,44 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    header
-                    destinationsSection
+                VStack(alignment: .leading, spacing: 24) {
+                    Text("Mindfully Social")
+                        .font(.system(size: 36, weight: .bold, design: .default))
+                        .foregroundStyle(HomePalette.primaryText)
+                        .tracking(-0.6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityIdentifier("appTitle")
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(Site.all.enumerated()), id: \.element.id) { index, site in
+                            SiteRowView(
+                                site: site,
+                                usage: UsageTimeStore.daily(for: site.id),
+                                onOpen: { selectedSite = site },
+                                onSettings: { settingsSite = site }
+                            )
+                            if index < Site.all.count - 1 {
+                                Rectangle()
+                                    .fill(HomePalette.rowDivider)
+                                    .frame(height: 1)
+                                    .padding(.leading, 78)
+                            }
+                        }
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .fill(HomePalette.surface)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 22, style: .continuous)
+                            .strokeBorder(HomePalette.surfaceStroke, lineWidth: 1)
+                    )
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 12)
                 .padding(.bottom, 48)
             }
-            .background { atmosphere.ignoresSafeArea() }
+            .background(HomePalette.background.ignoresSafeArea())
             .navigationBarHidden(true)
             .fullScreenCover(item: $selectedSite) { site in
                 SiteBrowserView(site: site) {
@@ -56,83 +81,6 @@ struct HomeView: View {
                     selectedSite = site
                 }
             }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Mindfully Social")
-                .font(.system(size: 36, weight: .bold, design: .default))
-                .foregroundStyle(HomePalette.primaryText)
-                .tracking(-0.6)
-                .accessibilityIdentifier("appTitle")
-
-            Text("Choose where you spend time today.")
-                .font(.subheadline)
-                .foregroundStyle(HomePalette.secondaryText)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.trailing, 8)
-    }
-
-    private var destinationsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Capsule()
-                    .fill(HomePalette.brandGreen)
-                    .frame(width: 18, height: 3)
-                Text("Destinations")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(HomePalette.secondaryText)
-                    .textCase(.uppercase)
-                    .tracking(0.8)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 4)
-
-            VStack(spacing: 0) {
-                ForEach(Array(Site.all.enumerated()), id: \.element.id) { index, site in
-                    SiteRowView(
-                        site: site,
-                        usage: UsageTimeStore.daily(for: site.id),
-                        onOpen: { selectedSite = site },
-                        onSettings: { settingsSite = site }
-                    )
-                    if index < Site.all.count - 1 {
-                        Rectangle()
-                            .fill(HomePalette.rowDivider)
-                            .frame(height: 1)
-                            .padding(.leading, 78)
-                    }
-                }
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(HomePalette.surface)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .strokeBorder(HomePalette.surfaceStroke, lineWidth: 1)
-            )
-        }
-    }
-
-    private var atmosphere: some View {
-        ZStack {
-            LinearGradient(
-                colors: [HomePalette.backgroundTop, HomePalette.backgroundBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            RadialGradient(
-                colors: [HomePalette.brandGreen.opacity(0.14), .clear],
-                center: .topLeading,
-                startRadius: 20,
-                endRadius: 340
-            )
-            .blendMode(.plusLighter)
-            .opacity(0.85)
         }
     }
 }
@@ -158,15 +106,10 @@ private struct SiteRowView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                     }
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(site.name)
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(HomePalette.primaryText)
-                        Text("Open site")
-                            .font(.caption)
-                            .foregroundStyle(HomePalette.tertiaryText)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Text(site.name)
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(HomePalette.primaryText)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
@@ -175,8 +118,8 @@ private struct SiteRowView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(usage.displayString)
-                    .font(.system(size: 20, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(HomePalette.primaryText)
+                    .font(.subheadline.weight(.medium).monospacedDigit())
+                    .foregroundStyle(HomePalette.secondaryText)
                     .accessibilityIdentifier("usage-\(site.id)")
                 Text(usage.caption)
                     .font(.caption2.weight(.medium))
@@ -221,7 +164,7 @@ private struct SiteSettingsPlaceholderSheet: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(HomePalette.backgroundBottom.ignoresSafeArea())
+            .background(HomePalette.background.ignoresSafeArea())
             .navigationTitle(site.name)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
