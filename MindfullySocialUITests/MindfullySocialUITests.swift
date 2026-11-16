@@ -394,9 +394,7 @@ final class MindfullySocialUITests: XCTestCase {
         attach("explore-final")
         // Keep process alive briefly so -DumpIGExplore timers can flush.
         Thread.sleep(forTimeInterval: 6)
-}
-}
-
+    }
 
     /// Fresh-simulator Instagram login only (for iPhone 17e / isolated sims).
     @MainActor
@@ -497,4 +495,5 @@ final class MindfullySocialUITests: XCTestCase {
         resultAtt.lifetime = .keepAlways
         add(resultAtt)
     }
+}
 
