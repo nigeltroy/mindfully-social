@@ -16,13 +16,14 @@ struct SiteBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 0) {
                 Text(usage.displayString)
                     .font(.footnote.monospacedDigit().weight(.medium))
                     .foregroundStyle(BrowserChromePalette.secondary)
+                    .frame(minWidth: 44, alignment: .leading)
                     .accessibilityIdentifier("browserUsageTime")
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 0)
 
                 Button {
                     finishAndClose()
@@ -30,17 +31,16 @@ struct SiteBrowserView: View {
                     Image(systemName: "xmark")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(BrowserChromePalette.primary)
-                        .frame(width: 44, height: 32)
+                        .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("browserCloseButton")
                 .accessibilityLabel("Close")
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 6)
-            .padding(.vertical, 2)
-            .frame(minHeight: 36)
+            // Symmetric horizontal inset — prior trailing 6 vs leading 16 was uneven.
+            .padding(.horizontal, 12)
+            .frame(height: 44)
             .background(BrowserChromePalette.bar)
 
             WebView(model: model)
