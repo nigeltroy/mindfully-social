@@ -38,8 +38,8 @@ struct SiteBrowserView: View {
                 .accessibilityIdentifier("browserCloseButton")
                 .accessibilityLabel("Close")
             }
-            // Symmetric horizontal inset — prior trailing 6 vs leading 16 was uneven.
-            .padding(.horizontal, 12)
+            // Symmetric inset aligned with home cards (~20 visual with safe area).
+            .padding(.horizontal, 16)
             .frame(height: 44)
             .background(BrowserChromePalette.bar)
 

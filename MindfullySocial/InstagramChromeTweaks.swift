@@ -19,71 +19,54 @@ enum InstagramChromeTweaks {
       style.id = STYLE_ID;
       (document.head || document.documentElement).appendChild(style);
     }
-    // Durable href CSS: IG recreates nodes and drops data-* marks; exact /reels path
-    // is only the bottom-tab entry (in-feed uses /reels/audio/... or /reel/...).
     style.textContent = [
+      /* Exact bottom-tab href only (in-feed uses /reels/audio/... or /…/reel/…). */
       'a[href="/reels/"],',
       'a[href="/reels"],',
-      'a[href="/reels/?hl=en"],',
       'a[href^="/reels/?"] {',
       '  display: none !important;',
-      '  width: 0 !important;',
-      '  min-width: 0 !important;',
-      '  max-width: 0 !important;',
-      '  flex: 0 0 0 !important;',
-      '  padding: 0 !important;',
-      '  margin: 0 !important;',
-      '  overflow: hidden !important;',
-      '  opacity: 0 !important;',
       '  pointer-events: none !important;',
-      '  border: 0 !important;',
-      '  position: absolute !important;',
-      '  height: 0 !important;',
       '}',
-      /* Marked wrappers (flex children) also collapse */
       '[data-msa-reels-target="1"] {',
       '  display: none !important;',
       '  width: 0 !important;',
       '  min-width: 0 !important;',
       '  max-width: 0 !important;',
       '  flex: 0 0 0 !important;',
+      '  grid-area: unset !important;',
+      '  grid-column: unset !important;',
       '  padding: 0 !important;',
       '  margin: 0 !important;',
       '  overflow: hidden !important;',
       '  opacity: 0 !important;',
       '  pointer-events: none !important;',
       '  height: 0 !important;',
+      '  border: 0 !important;',
       '}',
+      /* IG often uses CSS grid with 5 columns — force flex so removing Reels reflows. */
       '[data-msa-bottom-nav="1"] {',
       '  display: flex !important;',
+      '  flex-direction: row !important;',
       '  justify-content: space-evenly !important;',
-      '  align-items: stretch !important;',
+      '  align-items: center !important;',
       '  width: 100% !important;',
-      '  padding-left: 0 !important;',
-      '  padding-right: 0 !important;',
       '  gap: 0 !important;',
+      '  grid-template-columns: none !important;',
+      '  grid-template-rows: none !important;',
+      '  grid-auto-flow: unset !important;',
+      '  grid-auto-columns: unset !important;',
       '}',
-      '[data-msa-bottom-nav="1"] > * {',
+      '[data-msa-bottom-nav="1"] > *:not([data-msa-reels-target="1"]) {',
       '  flex: 1 1 0 !important;',
       '  display: flex !important;',
       '  justify-content: center !important;',
       '  align-items: center !important;',
       '  min-width: 0 !important;',
       '  max-width: none !important;',
+      '  width: auto !important;',
       '  margin: 0 !important;',
-      '}',
-      '[data-msa-bottom-nav="1"] > [data-msa-reels-target="1"],',
-      '[data-msa-bottom-nav="1"] > *:has(> a[href="/reels/"]),',
-      '[data-msa-bottom-nav="1"] > *:has(> a[href="/reels"]) {',
-      '  display: none !important;',
-      '  flex: 0 0 0 !important;',
-      '  width: 0 !important;',
-      '  min-width: 0 !important;',
-      '  max-width: 0 !important;',
-      '  padding: 0 !important;',
-      '  margin: 0 !important;',
-      '  overflow: hidden !important;',
-      '  height: 0 !important;',
+      '  grid-column: unset !important;',
+      '  grid-row: unset !important;',
       '}'
     ].join('\n');
   }
@@ -99,8 +82,7 @@ enum InstagramChromeTweaks {
       if (!abs) return '';
       return new URL(abs, location.origin).pathname.toLowerCase();
     } catch (e) {
-      var h = (el.getAttribute('href') || '').split('?')[0].split('#')[0].toLowerCase();
-      return h;
+      return (el.getAttribute('href') || '').split('?')[0].split('#')[0].toLowerCase();
     }
   }
 
@@ -112,28 +94,17 @@ enum InstagramChromeTweaks {
     return path === '/direct' || path.indexOf('/direct/') === 0;
   }
 
-  function markReelsTarget(el) {
-    var target = el;
-    var parent = el.parentElement;
-    if (parent && parent !== document.body && parent.children.length === 1) {
-      target = parent;
+  function climbToDirectChild(el, ancestor) {
+    var node = el;
+    while (node.parentElement && node.parentElement !== ancestor) {
+      node = node.parentElement;
     }
-    target.setAttribute('data-msa-reels-target', '1');
-    el.setAttribute('data-msa-reels-target', '1');
-    el.setAttribute('aria-hidden', 'true');
-    el.setAttribute('tabindex', '-1');
-  }
-
-  function clearStaleMarks(root) {
-    var old = root.querySelectorAll('[data-msa-reels-target],[data-msa-bottom-nav]');
-    for (var i = 0; i < old.length; i++) {
-      old[i].removeAttribute('data-msa-reels-target');
-      old[i].removeAttribute('data-msa-bottom-nav');
-    }
+    return node;
   }
 
   function findBottomNavHome() {
     var anchors = document.querySelectorAll('a[href]');
+    var best = null;
     for (var i = 0; i < anchors.length; i++) {
       var a = anchors[i];
       if (!isVisible(a)) continue;
@@ -142,72 +113,94 @@ enum InstagramChromeTweaks {
       if (r.top < window.innerHeight - 180) continue;
       if (r.width < 36 || r.height < 36) continue;
       var p = pathOf(a);
-      if (p === '/' || p === '') {
-        // Prefer Home labeled control when several "/" exist.
-        var label = (
-          a.getAttribute('aria-label') ||
-          (a.querySelector('title') && a.querySelector('title').textContent) ||
-          ''
-        ).toLowerCase();
-        if (!label || label.indexOf('home') !== -1) return a;
-      }
+      if (p !== '/' && p !== '') continue;
+      var label = (
+        a.getAttribute('aria-label') ||
+        (a.querySelector('title') && a.querySelector('title').textContent) ||
+        ''
+      ).toLowerCase();
+      if (label.indexOf('home') !== -1) return a;
+      if (!best) best = a;
     }
-    return null;
+    return best;
   }
 
-  function findNavContainer(home) {
+  function findNavRow(home) {
     if (!home) return null;
-    // Walk up until we find a parent that also contains Direct or Explore.
     var el = home.parentElement;
     while (el && el !== document.body) {
-      var links = el.querySelectorAll('a[href]');
-      var hasExplore = false;
-      var hasDirect = false;
-      var hasReels = false;
-      for (var i = 0; i < links.length; i++) {
-        var p = pathOf(links[i]);
-        if (p.indexOf('/explore') === 0) hasExplore = true;
-        if (isDirectPath(p)) hasDirect = true;
-        if (isExactReelsPath(p)) hasReels = true;
+      var links = el.querySelectorAll(':scope > a[href], :scope > * > a[href]');
+      // Prefer the shallowest parent that directly owns ~4–5 tab links.
+      var directTabs = [];
+      for (var c = 0; c < el.children.length; c++) {
+        var child = el.children[c];
+        var link = child.tagName === 'A' ? child : child.querySelector(':scope > a[href], a[href]');
+        if (!link) continue;
+        var r = link.getBoundingClientRect();
+        if (r.width < 30 || r.height < 30) continue;
+        if (r.bottom < window.innerHeight - 120) continue;
+        directTabs.push(link);
       }
-      if ((hasExplore || hasDirect) && (hasReels || links.length >= 4)) {
-        return el;
+      if (directTabs.length >= 4 && directTabs.length <= 6) {
+        return { container: el, tabs: directTabs };
       }
       el = el.parentElement;
     }
-    return home.parentElement;
+    return null;
   }
 
   function apply() {
     try {
       ensureStyle();
-      clearStaleMarks(document);
-
-      // Mark exact Reels tab anchors (not /reels/audio/..., not /reel/...).
-      var anchors = document.querySelectorAll('a[href]');
-      for (var i = 0; i < anchors.length; i++) {
-        var a = anchors[i];
-        var p = pathOf(a);
-        if (!isExactReelsPath(p)) continue;
-        if (isDirectPath(p)) continue;
-        if (!isVisible(a)) continue;
-        var r = a.getBoundingClientRect();
-        // Bottom tab row only.
-        if (r.bottom < window.innerHeight - 120) continue;
-        if (r.top < window.innerHeight - 200) continue;
-        markReelsTarget(a);
-      }
 
       var home = findBottomNavHome();
-      var container = findNavContainer(home);
-      if (container) {
-        container.setAttribute('data-msa-bottom-nav', '1');
-        // Also mark any exact-reels child wrappers inside the nav for flex collapse.
-        var navLinks = container.querySelectorAll('a[href]');
-        for (var j = 0; j < navLinks.length; j++) {
-          if (isExactReelsPath(pathOf(navLinks[j]))) {
-            markReelsTarget(navLinks[j]);
+      var row = findNavRow(home);
+      if (!row) {
+        // Fallback: mark exact /reels/ anchors near the bottom anyway.
+        var anchors = document.querySelectorAll('a[href]');
+        for (var i = 0; i < anchors.length; i++) {
+          var a = anchors[i];
+          if (!isExactReelsPath(pathOf(a))) continue;
+          if (!isVisible(a)) continue;
+          var r = a.getBoundingClientRect();
+          if (r.bottom < window.innerHeight - 120) continue;
+          if (r.top < window.innerHeight - 200) continue;
+          a.setAttribute('data-msa-reels-target', '1');
+          if (a.parentElement && a.parentElement.children.length === 1) {
+            a.parentElement.setAttribute('data-msa-reels-target', '1');
           }
+        }
+        return;
+      }
+
+      var container = row.container;
+      container.setAttribute('data-msa-bottom-nav', '1');
+      // Inline overrides beat IG stylesheet grid.
+      container.style.setProperty('display', 'flex', 'important');
+      container.style.setProperty('flex-direction', 'row', 'important');
+      container.style.setProperty('justify-content', 'space-evenly', 'important');
+      container.style.setProperty('align-items', 'center', 'important');
+      container.style.setProperty('grid-template-columns', 'none', 'important');
+
+      for (var j = 0; j < container.children.length; j++) {
+        var child = container.children[j];
+        child.removeAttribute('data-msa-reels-target');
+        var link = child.tagName === 'A' ? child : child.querySelector('a[href]');
+        if (!link) continue;
+        var p = pathOf(link);
+        if (isExactReelsPath(p) && !isDirectPath(p)) {
+          var slot = climbToDirectChild(link, container);
+          slot.setAttribute('data-msa-reels-target', '1');
+          slot.style.setProperty('display', 'none', 'important');
+          slot.style.setProperty('flex', '0 0 0', 'important');
+          slot.style.setProperty('width', '0', 'important');
+          link.setAttribute('aria-hidden', 'true');
+          link.setAttribute('tabindex', '-1');
+        } else {
+          child.style.setProperty('flex', '1 1 0', 'important');
+          child.style.setProperty('display', 'flex', 'important');
+          child.style.setProperty('justify-content', 'center', 'important');
+          child.style.removeProperty('width');
         }
       }
     } catch (e) {
@@ -244,7 +237,7 @@ enum InstagramChromeTweaks {
   window.addEventListener('resize', schedule);
   window.addEventListener('popstate', schedule);
   document.addEventListener('visibilitychange', schedule);
-  setInterval(apply, 1000);
+  setInterval(apply, 800);
 })();
 """#
 }
