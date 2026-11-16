@@ -6,7 +6,7 @@ final class MindfullySocialUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeGridOpensInstagramAndYouTube() throws {
+    func testHomeListOpensInstagramAndYouTube() throws {
         let app = XCUIApplication()
         app.launch()
 
@@ -18,9 +18,14 @@ final class MindfullySocialUITests: XCTestCase {
         XCTAssertTrue(instagram.waitForExistence(timeout: 5))
         XCTAssertTrue(youtube.exists)
 
+        XCTAssertTrue(app.staticTexts["usage-instagram"].exists)
+        XCTAssertTrue(app.staticTexts["usage-youtube"].exists)
+        XCTAssertTrue(app.buttons["settings-instagram"].exists)
+        XCTAssertTrue(app.buttons["settings-youtube"].exists)
+
         let homeShot = app.screenshot()
         let homeAttachment = XCTAttachment(screenshot: homeShot)
-        homeAttachment.name = "home-grid"
+        homeAttachment.name = "home-list"
         homeAttachment.lifetime = .keepAlways
         add(homeAttachment)
 
@@ -30,7 +35,6 @@ final class MindfullySocialUITests: XCTestCase {
         let web = app.otherElements["browserWebView"]
         XCTAssertTrue(web.waitForExistence(timeout: 15))
 
-        // Allow page load briefly for visual proof
         Thread.sleep(forTimeInterval: 4)
         let igShot = app.screenshot()
         let igAttachment = XCTAttachment(screenshot: igShot)
