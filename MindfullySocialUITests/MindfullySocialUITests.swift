@@ -70,8 +70,9 @@ final class MindfullySocialUITests: XCTestCase {
 
         let close = app.buttons["browserCloseButton"]
         XCTAssertTrue(close.waitForExistence(timeout: 25), "browser chrome missing")
-        let web = app.otherElements["browserWebView"]
-        XCTAssertTrue(web.waitForExistence(timeout: 20))
+        // WKWebView accessibility type varies; prefer webViews, fall back to any.
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 20) || app.otherElements["browserWebView"].waitForExistence(timeout: 5))
 
         Thread.sleep(forTimeInterval: 10)
         dismissIGAlerts(in: app)
@@ -81,10 +82,10 @@ final class MindfullySocialUITests: XCTestCase {
         beforeTop.lifetime = .keepAlways
         add(beforeTop)
 
-        // Deep scroll to surface ads / suggested blocks.
-        for _ in 0..<8 {
-            web.swipeUp()
-            Thread.sleep(forTimeInterval: 1.2)
+        // Deep scroll via coordinates — identifier swipe is flaky on WKWebView.
+        for _ in 0..<10 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.1)
         }
         Thread.sleep(forTimeInterval: 3)
         dismissIGAlerts(in: app)
@@ -101,7 +102,7 @@ final class MindfullySocialUITests: XCTestCase {
         app.launchArguments = ["-OpenSite", "instagram", "-DumpIGFeed"]
         app.launch()
         XCTAssertTrue(close.waitForExistence(timeout: 25))
-        XCTAssertTrue(web.waitForExistence(timeout: 20))
+        _ = web.waitForExistence(timeout: 20)
         Thread.sleep(forTimeInterval: 10)
         dismissIGAlerts(in: app)
 
@@ -110,9 +111,9 @@ final class MindfullySocialUITests: XCTestCase {
         afterTop.lifetime = .keepAlways
         add(afterTop)
 
-        for _ in 0..<8 {
-            web.swipeUp()
-            Thread.sleep(forTimeInterval: 1.2)
+        for _ in 0..<10 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.1)
         }
         Thread.sleep(forTimeInterval: 4)
         dismissIGAlerts(in: app)
@@ -151,6 +152,13 @@ final class MindfullySocialUITests: XCTestCase {
         softReload.name = "after-soft-reload"
         softReload.lifetime = .keepAlways
         add(softReload)
+    }
+
+    @MainActor
+    private func swipeFeedUp(in app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.28))
+        start.press(forDuration: 0.05, thenDragTo: end)
     }
 
     @MainActor

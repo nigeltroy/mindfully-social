@@ -21,12 +21,16 @@ extension InstagramChromeTweaks {
     'advertisement': 'sponsored',
     'promoted': 'sponsored',
     'suggested for you': 'suggested',
+    'suggestions for you': 'suggested',
     'suggested posts': 'suggested-section',
     'suggested post': 'suggested',
     'suggested': 'suggested'
   };
   var PREFIX_LABELS = [
-    { prefix: 'paid partnership', reason: 'sponsored' }
+    { prefix: 'paid partnership', reason: 'sponsored' },
+    { prefix: 'suggestions for you', reason: 'suggested' },
+    { prefix: 'suggested for you', reason: 'suggested' },
+    { prefix: 'suggested posts', reason: 'suggested-section' }
   ];
 
   function normText(s) {
@@ -59,10 +63,17 @@ extension InstagramChromeTweaks {
 
   function matchLabel(raw) {
     var t = normText(raw);
-    if (!t || t.length > 48) return null;
+    if (!t || t.length > 64) return null;
     if (EXACT_LABELS[t]) return EXACT_LABELS[t];
     for (var i = 0; i < PREFIX_LABELS.length; i++) {
       if (t.indexOf(PREFIX_LABELS[i].prefix) === 0) return PREFIX_LABELS[i].reason;
+    }
+    // IG often concatenates "Suggestions for you" + "See all" with no space.
+    if (t.indexOf('suggestions for you') !== -1 && t.length <= 40) {
+      return 'suggested';
+    }
+    if (t.indexOf('suggested for you') !== -1 && t.length <= 40) {
+      return 'suggested';
     }
     return null;
   }
@@ -167,7 +178,18 @@ extension InstagramChromeTweaks {
       var only = el.firstElementChild;
       if (only && only.childElementCount === 0) return only.textContent || '';
     }
-    return '';
+    // Concatenate shallow text without descending into deep caption trees.
+    var parts = [];
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n.nodeType === 3) {
+        parts.push(n.nodeValue || '');
+      } else if (n.nodeType === 1 && n.childElementCount === 0) {
+        var bit = (n.textContent || '').replace(/\s+/g, ' ').trim();
+        if (bit && bit.length <= 32) parts.push(bit);
+      }
+    }
+    return parts.join('');
   }
 
   function scanLabelNodes(root) {
@@ -180,11 +202,42 @@ extension InstagramChromeTweaks {
       var el = nodes[i];
       var raw = leafishText(el);
       var reason = matchLabel(raw);
+      if (!reason && el.childElementCount === 0) {
+        reason = matchLabel(el.textContent || '');
+        raw = el.textContent || '';
+      }
       if (!reason) continue;
       if (isInBottomNav(el)) continue;
       hits.push({ el: el, reason: reason, text: normText(raw) });
     }
     return hits;
+  }
+
+  function articleLooksSponsored(article) {
+    if (!article || !article.querySelectorAll) return false;
+    if (article.querySelector('[data-ad-preview="message"], [data-ad-rendering-role], [data-ad-media]')) {
+      return true;
+    }
+    // Header strip only — avoid caption false positives.
+    var headerBudget = 0;
+    var nodes = article.querySelectorAll('span, a, div, h1, h2, h3');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var raw = leafishText(el) || (el.childElementCount === 0 ? (el.textContent || '') : '');
+      var t = normText(raw);
+      if (!t || t.length > 24) continue;
+      try {
+        var lr = el.getBoundingClientRect();
+        var ar = article.getBoundingClientRect();
+        if (ar.height > 0 && (lr.top - ar.top) > 140) continue;
+      } catch (e) {}
+      if (t === 'ad' || t === 'sponsored' || t === 'promoted' || t.indexOf('paid partnership') === 0) {
+        return true;
+      }
+      headerBudget++;
+      if (headerBudget > 80) break;
+    }
+    return false;
   }
 
   function scanArticlesForAdAttrs(root) {
@@ -194,9 +247,7 @@ extension InstagramChromeTweaks {
     for (var i = 0; i < articles.length; i++) {
       var a = articles[i];
       if (a.getAttribute(FEED_MARK) === '1') continue;
-      if (a.querySelector('[data-ad-preview="message"], [data-ad-rendering-role], [data-ad-media]')) {
-        out.push(a);
-      }
+      if (articleLooksSponsored(a)) out.push(a);
     }
     return out;
   }
