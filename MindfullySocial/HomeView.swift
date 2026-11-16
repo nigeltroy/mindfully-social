@@ -118,11 +118,11 @@ private struct SiteRowView: View {
 
             VStack(alignment: .trailing, spacing: 2) {
                 Text(usage.displayString)
-                    .font(.subheadline.weight(.medium).monospacedDigit())
+                    .font(.footnote.monospacedDigit())
                     .foregroundStyle(HomePalette.secondaryText)
                     .accessibilityIdentifier("usage-\(site.id)")
                 Text(usage.caption)
-                    .font(.caption2.weight(.medium))
+                    .font(.caption2)
                     .foregroundStyle(HomePalette.tertiaryText)
             }
             .frame(minWidth: 44, alignment: .trailing)
