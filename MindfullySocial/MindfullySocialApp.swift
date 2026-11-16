@@ -4,7 +4,8 @@ import SwiftUI
 struct MindfullySocialApp: App {
     var body: some Scene {
         WindowGroup {
-            BrowserView()
+            HomeView()
+                .preferredColorScheme(.dark)
         }
     }
 }

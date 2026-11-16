@@ -2,9 +2,9 @@
 
 iOS app for mindful social browsing. Native SwiftUI shell with an in-app browser (WKWebView).
 
-## MVP
+## Current slice
 
-On launch the app searches Google for **cat**, then opens the first organic result (auto, or via **Open first result**).
+Dark home screen with the **Mindfully Social** name and a grid of site icons (Instagram, YouTube). Tapping an icon opens that site in an in-app WKWebView with back and close chrome.
 
 ## Develop / test (Mac mini Tart guest)
 

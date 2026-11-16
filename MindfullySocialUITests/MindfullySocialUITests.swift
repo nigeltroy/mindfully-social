@@ -6,44 +6,51 @@ final class MindfullySocialUITests: XCTestCase {
     }
 
     @MainActor
-    func testSearchesGoogleForCatAndOpensFirstResult() throws {
+    func testHomeGridOpensInstagramAndYouTube() throws {
         let app = XCUIApplication()
         app.launch()
 
-        let status = app.staticTexts["statusLabel"]
-        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        let title = app.staticTexts["appTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
 
-        let openButton = app.buttons["openFirstResultButton"]
-        XCTAssertTrue(openButton.waitForExistence(timeout: 10))
+        let instagram = app.buttons["site-instagram"]
+        let youtube = app.buttons["site-youtube"]
+        XCTAssertTrue(instagram.waitForExistence(timeout: 5))
+        XCTAssertTrue(youtube.exists)
 
-        // Wait until search is ready or first result already opened (auto-open).
-        let deadline = Date().addingTimeInterval(45)
-        var opened = false
-        while Date() < deadline {
-            let text = status.label
-            if text.hasPrefix("Opened:") || text.hasPrefix("Viewing") {
-                opened = true
-                break
-            }
-            if openButton.isEnabled {
-                openButton.tap()
-                // give navigation time
-                Thread.sleep(forTimeInterval: 2)
-            }
-            Thread.sleep(forTimeInterval: 1)
-        }
+        let homeShot = app.screenshot()
+        let homeAttachment = XCTAttachment(screenshot: homeShot)
+        homeAttachment.name = "home-grid"
+        homeAttachment.lifetime = .keepAlways
+        add(homeAttachment)
 
-        let finalText = status.label
-        XCTAssertTrue(
-            opened || finalText.hasPrefix("Opened:") || finalText.hasPrefix("Viewing"),
-            "Expected first result to open; status was: \(finalText)"
-        )
+        instagram.tap()
+        let close = app.buttons["browserCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 15))
+        let web = app.otherElements["browserWebView"]
+        XCTAssertTrue(web.waitForExistence(timeout: 15))
 
-        // Capture proof screenshot from XCTest
-        let shot = app.screenshot()
-        let attachment = XCTAttachment(screenshot: shot)
-        attachment.name = "first-result-opened"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        // Allow page load briefly for visual proof
+        Thread.sleep(forTimeInterval: 4)
+        let igShot = app.screenshot()
+        let igAttachment = XCTAttachment(screenshot: igShot)
+        igAttachment.name = "instagram-open"
+        igAttachment.lifetime = .keepAlways
+        add(igAttachment)
+
+        close.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+
+        youtube.tap()
+        XCTAssertTrue(close.waitForExistence(timeout: 15))
+        Thread.sleep(forTimeInterval: 4)
+        let ytShot = app.screenshot()
+        let ytAttachment = XCTAttachment(screenshot: ytShot)
+        ytAttachment.name = "youtube-open"
+        ytAttachment.lifetime = .keepAlways
+        add(ytAttachment)
+
+        close.tap()
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
     }
 }
