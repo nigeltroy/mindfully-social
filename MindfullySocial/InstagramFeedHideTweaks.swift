@@ -84,9 +84,11 @@ extension InstagramChromeTweaks {
       if (n.getAttribute && n.getAttribute('data-msa-bottom-nav') === '1') return true;
       n = n.parentElement;
     }
+    // Geometric fallback ONLY for small chrome controls — never skip tall feed articles
+    // that are merely entering from the bottom of the viewport.
     try {
       var r = el.getBoundingClientRect();
-      if (r.top > window.innerHeight - 120) return true;
+      if (r.height > 0 && r.height < 96 && r.top > window.innerHeight - 120) return true;
     } catch (e) {}
     return false;
   }
