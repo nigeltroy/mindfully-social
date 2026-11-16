@@ -1,12 +1,14 @@
 import SwiftUI
 
 private enum HomePalette {
-    /// Slightly lifted dark (not pure #000).
-    static let background = Color(white: 0.08)
-    /// Slightly muted white (not pure #FFF).
-    static let primaryText = Color(white: 0.92)
-    static let secondaryText = Color(white: 0.92).opacity(0.72)
-    static let rowDivider = Color(white: 0.18)
+    /// Softened charcoal — not pure black.
+    static let background = Color(white: 0.07)
+    /// Soft near-white primary.
+    static let primaryText = Color(white: 0.90)
+    /// Secondary labels (usage time, gear) — Screen Time–like mute.
+    static let secondaryText = Color(white: 0.55)
+    /// Hairline separators.
+    static let rowDivider = Color(white: 1.0).opacity(0.08)
 }
 
 struct HomeView: View {
@@ -16,13 +18,14 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 28) {
+                VStack(alignment: .leading, spacing: 20) {
                     Text("Mindfully Social")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
+                        .font(.system(size: 34, weight: .bold, design: .default))
                         .foregroundStyle(HomePalette.primaryText)
+                        .tracking(-0.4)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, 20)
-                        .padding(.top, 12)
+                        .padding(.top, 8)
                         .accessibilityIdentifier("appTitle")
 
                     VStack(spacing: 0) {
@@ -34,13 +37,14 @@ struct HomeView: View {
                                 onSettings: { settingsSite = site }
                             )
                             if index < Site.all.count - 1 {
-                                Divider()
-                                    .background(HomePalette.rowDivider)
-                                    .padding(.leading, 72)
+                                Rectangle()
+                                    .fill(HomePalette.rowDivider)
+                                    .frame(height: 0.33)
+                                    .padding(.leading, 76)
                             }
                         }
                     }
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, 8)
                 }
                 .padding(.bottom, 40)
             }
@@ -78,42 +82,46 @@ private struct SiteRowView: View {
     let onSettings: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 0) {
             Button(action: onOpen) {
                 HStack(spacing: 14) {
                     Image(site.iconAssetName)
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 44, height: 44)
-                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .frame(width: 40, height: 40)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
 
                     Text(site.name)
-                        .font(.body.weight(.medium))
+                        .font(.body.weight(.regular))
                         .foregroundStyle(HomePalette.primaryText)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
+                .padding(.vertical, 12)
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("site-\(site.id)")
 
-            Text(usage.displayString)
-                .font(.subheadline.monospacedDigit())
-                .foregroundStyle(HomePalette.secondaryText)
-                .accessibilityIdentifier("usage-\(site.id)")
-
-            Button(action: onSettings) {
-                Image(systemName: "gearshape")
-                    .font(.body.weight(.medium))
+            HStack(spacing: 6) {
+                Text(usage.displayString)
+                    .font(.subheadline.monospacedDigit())
                     .foregroundStyle(HomePalette.secondaryText)
-                    .frame(width: 36, height: 36)
-                    .contentShape(Rectangle())
+                    .frame(minWidth: 36, alignment: .trailing)
+                    .accessibilityIdentifier("usage-\(site.id)")
+
+                Button(action: onSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .regular))
+                        .foregroundStyle(HomePalette.secondaryText)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settings-\(site.id)")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("settings-\(site.id)")
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 14)
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
     }
 }
 
