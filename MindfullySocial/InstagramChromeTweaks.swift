@@ -149,9 +149,23 @@ enum InstagramChromeTweaks {
     return null;
   }
 
+  function dismissBlockingTips() {
+    try {
+      var nodes = document.querySelectorAll('button, [role="button"]');
+      for (var i = 0; i < nodes.length; i++) {
+        var t = (nodes[i].textContent || '').replace(/\s+/g, ' ').trim();
+        if (t === 'OK' || t === 'Ok') {
+          nodes[i].click();
+          return;
+        }
+      }
+    } catch (e) {}
+  }
+
   function apply() {
     try {
       ensureStyle();
+      dismissBlockingTips();
 
       var home = findBottomNavHome();
       var row = findNavRow(home);
@@ -175,13 +189,17 @@ enum InstagramChromeTweaks {
 
       var container = row.container;
       container.setAttribute('data-msa-bottom-nav', '1');
-      // Inline overrides beat IG stylesheet grid.
+      // Inline overrides beat IG stylesheet grid (5-col holes after hide).
       container.style.setProperty('display', 'flex', 'important');
       container.style.setProperty('flex-direction', 'row', 'important');
       container.style.setProperty('justify-content', 'space-evenly', 'important');
       container.style.setProperty('align-items', 'center', 'important');
       container.style.setProperty('grid-template-columns', 'none', 'important');
+      container.style.setProperty('padding-left', '0', 'important');
+      container.style.setProperty('padding-right', '0', 'important');
+      container.style.setProperty('gap', '0', 'important');
 
+      var keep = [];
       for (var j = 0; j < container.children.length; j++) {
         var child = container.children[j];
         child.removeAttribute('data-msa-reels-target');
@@ -194,14 +212,34 @@ enum InstagramChromeTweaks {
           slot.style.setProperty('display', 'none', 'important');
           slot.style.setProperty('flex', '0 0 0', 'important');
           slot.style.setProperty('width', '0', 'important');
+          slot.style.setProperty('min-width', '0', 'important');
+          slot.style.setProperty('max-width', '0', 'important');
+          slot.style.setProperty('padding', '0', 'important');
+          slot.style.setProperty('margin', '0', 'important');
+          slot.style.setProperty('overflow', 'hidden', 'important');
           link.setAttribute('aria-hidden', 'true');
           link.setAttribute('tabindex', '-1');
-        } else {
-          child.style.setProperty('flex', '1 1 0', 'important');
-          child.style.setProperty('display', 'flex', 'important');
-          child.style.setProperty('justify-content', 'center', 'important');
-          child.style.removeProperty('width');
+          continue;
         }
+        keep.push(child);
+      }
+
+      var n = keep.length || 1;
+      var pct = (100 / n).toFixed(4) + '%';
+      for (var k = 0; k < keep.length; k++) {
+        var slotKeep = keep[k];
+        slotKeep.style.setProperty('flex', '1 1 0', 'important');
+        slotKeep.style.setProperty('flex-grow', '1', 'important');
+        slotKeep.style.setProperty('flex-basis', '0', 'important');
+        slotKeep.style.setProperty('width', pct, 'important');
+        slotKeep.style.setProperty('max-width', pct, 'important');
+        slotKeep.style.setProperty('min-width', '0', 'important');
+        slotKeep.style.setProperty('display', 'flex', 'important');
+        slotKeep.style.setProperty('justify-content', 'center', 'important');
+        slotKeep.style.setProperty('align-items', 'center', 'important');
+        slotKeep.style.setProperty('margin', '0', 'important');
+        slotKeep.style.setProperty('padding-left', '0', 'important');
+        slotKeep.style.setProperty('padding-right', '0', 'important');
       }
     } catch (e) {
       // Keep browsing even if Instagram DOM shifts.
