@@ -17,6 +17,7 @@
 		A10000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000019 /* Assets.xcassets */; };
 		A10000000000000000000009 /* PersistProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* PersistProbe.swift */; };
 		A1000000000000000000000B /* UsageTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* UsageTime.swift */; };
+		A1000000000000000000000C /* InstagramChromeTweaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* InstagramChromeTweaks.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,6 +43,7 @@
 		A10000000000000000000019 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A1000000000000000000001A /* PersistProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistProbe.swift; sourceTree = "<group>"; };
 		A1000000000000000000001B /* UsageTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageTime.swift; sourceTree = "<group>"; };
+		A1000000000000000000001C /* InstagramChromeTweaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramChromeTweaks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -81,6 +83,7 @@
 				A10000000000000000000018 /* SiteBrowserView.swift */,
 				A10000000000000000000013 /* BrowserModel.swift */,
 				A10000000000000000000014 /* WebView.swift */,
+				A1000000000000000000001C /* InstagramChromeTweaks.swift */,
 				A1000000000000000000001A /* PersistProbe.swift */,
 				A10000000000000000000019 /* Assets.xcassets */,
 			);
@@ -210,6 +213,7 @@
 				A10000000000000000000007 /* SiteBrowserView.swift in Sources */,
 				A10000000000000000000003 /* BrowserModel.swift in Sources */,
 				A10000000000000000000004 /* WebView.swift in Sources */,
+				A1000000000000000000000C /* InstagramChromeTweaks.swift in Sources */,
 				A10000000000000000000009 /* PersistProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
