@@ -65,6 +65,16 @@ struct HomeView: View {
             }
         }
         .preferredColorScheme(.dark)
+        .onAppear {
+            // Proof / automation: -OpenSite instagram|youtube
+            let args = ProcessInfo.processInfo.arguments
+            if let idx = args.firstIndex(of: "-OpenSite"), args.index(after: idx) < args.endIndex {
+                let raw = args[args.index(after: idx)].lowercased()
+                if let site = Site.all.first(where: { $0.id == raw }) {
+                    selectedSite = site
+                }
+            }
+        }
     }
 }
 
