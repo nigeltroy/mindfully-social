@@ -234,8 +234,6 @@ final class MindfullySocialUITests: XCTestCase {
 
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 10))
-        let env = ProcessInfo.processInfo.environment
-
         func clearAndType(_ field: XCUIElement, text: String) {
             field.tap()
             Thread.sleep(forTimeInterval: 0.25)
@@ -247,10 +245,9 @@ final class MindfullySocialUITests: XCTestCase {
         }
 
         func attemptLoginIfNeeded() {
-            guard
-                let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
-                let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty
-            else { return }
+            guard let creds = instagramCredentials() else { return }
+            let username = creds.username
+            let password = creds.password
 
             // Logged-out explore/home often shows a Log in link before fields.
             let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
@@ -396,16 +393,34 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 6)
     }
 
+    /// Load Instagram credentials from process env or guest temp files (never log values).
+    private func instagramCredentials() -> (username: String, password: String)? {
+        let env = ProcessInfo.processInfo.environment
+        if let u = env["INSTAGRAM_USERNAME"], !u.isEmpty,
+           let p = env["INSTAGRAM_PASSWORD"], !p.isEmpty {
+            return (u, p)
+        }
+        // Tart guest fallback used when xcodebuild does not forward env into the test runner.
+        let userURL = URL(fileURLWithPath: "/tmp/msa19-ig-user.txt")
+        let passURL = URL(fileURLWithPath: "/tmp/msa19-ig-pass.txt")
+        guard
+            let u = try? String(contentsOf: userURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+            let p = try? String(contentsOf: passURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+            !u.isEmpty, !p.isEmpty
+        else {
+            return nil
+        }
+        return (u, p)
+    }
+
     /// Fresh-simulator Instagram login only (for iPhone 17e / isolated sims).
     @MainActor
     func testInstagramLoginOnly() throws {
-        let env = ProcessInfo.processInfo.environment
-        guard
-            let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
-            let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty
-        else {
+        guard let creds = instagramCredentials() else {
             throw XCTSkip("INSTAGRAM_USERNAME / INSTAGRAM_PASSWORD not set")
         }
+        let username = creds.username
+        let password = creds.password
 
         let app = XCUIApplication()
         app.launchArguments = ["-OpenSite", "instagram"]
