@@ -18,6 +18,7 @@
 		A10000000000000000000009 /* PersistProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A /* PersistProbe.swift */; };
 		A1000000000000000000000B /* UsageTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001B /* UsageTime.swift */; };
 		A1000000000000000000000C /* InstagramChromeTweaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001C /* InstagramChromeTweaks.swift */; };
+		A1000000000000000000000D /* InstagramSearchReelsHide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* InstagramSearchReelsHide.swift */; };
 		A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* InstagramFeedHideTweaks.swift */; };
 /* End PBXBuildFile section */
 
@@ -45,6 +46,7 @@
 		A1000000000000000000001A /* PersistProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistProbe.swift; sourceTree = "<group>"; };
 		A1000000000000000000001B /* UsageTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageTime.swift; sourceTree = "<group>"; };
 		A1000000000000000000001C /* InstagramChromeTweaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramChromeTweaks.swift; sourceTree = "<group>"; };
+		A1000000000000000000001D /* InstagramSearchReelsHide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramSearchReelsHide.swift; sourceTree = "<group>"; };
 		A1000000000000000000001E /* InstagramFeedHideTweaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramFeedHideTweaks.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -86,6 +88,7 @@
 				A10000000000000000000013 /* BrowserModel.swift */,
 				A10000000000000000000014 /* WebView.swift */,
 				A1000000000000000000001C /* InstagramChromeTweaks.swift */,
+				A1000000000000000000001D /* InstagramSearchReelsHide.swift */,
 				A1000000000000000000001E /* InstagramFeedHideTweaks.swift */,
 				A1000000000000000000001A /* PersistProbe.swift */,
 				A10000000000000000000019 /* Assets.xcassets */,
@@ -217,6 +220,7 @@
 				A10000000000000000000003 /* BrowserModel.swift in Sources */,
 				A10000000000000000000004 /* WebView.swift in Sources */,
 				A1000000000000000000000C /* InstagramChromeTweaks.swift in Sources */,
+				A1000000000000000000000D /* InstagramSearchReelsHide.swift in Sources */,
 				A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */,
 				A10000000000000000000009 /* PersistProbe.swift in Sources */,
 			);

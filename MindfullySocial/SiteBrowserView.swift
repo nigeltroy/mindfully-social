@@ -58,7 +58,8 @@ struct SiteBrowserView: View {
             UsageTimeStore.beginSession(for: site.id)
             refreshUsage()
             startUsageTicker()
-            model.load(url: site.url)
+            model.load(url: resolveLaunchURL(for: site))
+            model.startExploreDumpIfRequested()
         }
         .onDisappear {
             stopUsageTicker()
@@ -90,6 +91,21 @@ struct SiteBrowserView: View {
         stopUsageTicker()
         UsageTimeStore.endSession(for: site.id)
         onClose()
+    }
+
+    /// Optional `-OpenPath /explore/` (with `-OpenSite instagram`) for Tart proof.
+    private func resolveLaunchURL(for site: Site) -> URL {
+        let args = ProcessInfo.processInfo.arguments
+        guard
+            site.id == "instagram",
+            let idx = args.firstIndex(of: "-OpenPath"),
+            args.index(after: idx) < args.endIndex
+        else {
+            return site.url
+        }
+        var path = args[args.index(after: idx)]
+        if !path.hasPrefix("/") { path = "/" + path }
+        return URL(string: "https://www.instagram.com\(path)") ?? site.url
     }
 }
 

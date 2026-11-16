@@ -53,7 +53,8 @@ final class BrowserModel: ObservableObject {
         })
     }
 
-    /// Site-specific WKUserScripts (Instagram Reels nav + feed-ad hide). Safe once before load.
+    /// Site-specific WKUserScripts (Instagram). Safe once before load.
+    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-19 Search/Explore Reels hide.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -62,7 +63,8 @@ final class BrowserModel: ObservableObject {
 
         let sources = [
             InstagramChromeTweaks.userScriptSource,
-            InstagramChromeTweaks.feedHideUserScriptSource
+            InstagramChromeTweaks.feedHideUserScriptSource,
+            InstagramSearchReelsHide.searchReelsHideUserScriptSource
         ]
         for source in sources {
             let script = WKUserScript(
@@ -123,6 +125,7 @@ final class BrowserModel: ObservableObject {
       : { error: 'feed_hide_missing' };
     dump.reelsInstalled = !!window.__msaReelsInstalled;
     dump.feedInstalled = !!window.__msaFeedHideInstalled;
+    dump.exploreInstalled = !!window.__msaExploreReelsInstalled;
     dump.hasReelsStyle = !!document.getElementById('msa-hide-reels-style');
     dump.hasFeedStyle = !!document.getElementById('msa-hide-feed-ads-style');
     dump.bottomNav = !!document.querySelector('[data-msa-bottom-nav="1"]');
@@ -161,6 +164,37 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-feed-hide-dump.json")
             try? payload.write(to: url, atomically: true, encoding: .utf8)
             NSLog("FeedHideDump: wrote %d bytes", payload.utf8.count)
+        }
+    }
+
+    /// When launched with `-DumpIGExplore`, periodically write explore tile dump to Documents.
+    func startExploreDumpIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGExplore") else { return }
+        // Delay until IG SPA paints; repeat a few times for scroll/nav hardening.
+        for delay in [4.0, 8.0, 14.0, 22.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.writeExploreDump(suffix: String(Int(delay)))
+            }
+        }
+    }
+
+    private func writeExploreDump(suffix: String) {
+        webView.evaluateJavaScript(InstagramSearchReelsHide.dumpExploreScript) { result, error in
+            let body: String
+            if let error {
+                body = "{\"error\":\"evaluate\",\"detail\":\"\(error.localizedDescription)\"}\n"
+            } else if let text = result as? String {
+                body = text + "\n"
+            } else {
+                body = "{\"error\":\"non_string_result\"}\n"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-explore-dump-\(suffix).json")
+            try? body.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("MSA ExploreDump: wrote %@", url.lastPathComponent)
         }
     }
 }
