@@ -201,8 +201,37 @@ extension InstagramChromeTweaks {
     return out;
   }
 
+  function dismissChromeNags() {
+    try {
+      var nodes = document.querySelectorAll('button, [role="button"], div[role="button"], a');
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        var t = normText(el.textContent);
+        if (t === 'not now' || t === 'ok' || t === 'allow all cookies' || t === 'decline optional cookies') {
+          el.click();
+          return;
+        }
+      }
+      // "Use the app" install banner — close via nearby x if present.
+      for (var j = 0; j < nodes.length; j++) {
+        var n = nodes[j];
+        if (normText(n.textContent) !== 'use the app') continue;
+        var wrap = n.parentElement;
+        for (var d = 0; d < 4 && wrap; d++) {
+          var closer = wrap.querySelector('[aria-label*="Close" i], [aria-label*="Dismiss" i], button');
+          if (closer && closer !== n) {
+            closer.click();
+            return;
+          }
+          wrap = wrap.parentElement;
+        }
+      }
+    } catch (e) {}
+  }
+
   function applyFeedHide() {
     try {
+      dismissChromeNags();
       if (window.__msaFeedHide && window.__msaFeedHide.enabled === false) {
         reinforceCollapsed();
         return;
