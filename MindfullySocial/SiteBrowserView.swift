@@ -54,11 +54,12 @@ struct SiteBrowserView: View {
 
             WebView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .ignoresSafeArea(edges: .bottom)
                 .accessibilityIdentifier("browserWebView")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.black.ignoresSafeArea())
+        .background(Color.black)
+        // Consume bottom safe-area so WKWebView reaches the home indicator.
+        .ignoresSafeArea(edges: .bottom)
         .preferredColorScheme(.dark)
         .onAppear {
             model.load(url: site.url)
