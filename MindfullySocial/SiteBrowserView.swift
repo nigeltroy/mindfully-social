@@ -30,15 +30,17 @@ struct SiteBrowserView: View {
                     Image(systemName: "xmark")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(BrowserChromePalette.primary)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 32)
                         .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
                 .accessibilityIdentifier("browserCloseButton")
                 .accessibilityLabel("Close")
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 4)
-            .frame(minHeight: 32)
+            .padding(.leading, 16)
+            .padding(.trailing, 6)
+            .padding(.vertical, 2)
+            .frame(minHeight: 36)
             .background(BrowserChromePalette.bar)
 
             WebView(model: model)
