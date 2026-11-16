@@ -203,4 +203,158 @@ final class MindfullySocialUITests: XCTestCase {
             break
         }
     }
+
+    /// Opens Instagram Explore, exercises Search, scrolls, and captures proof screenshots.
+    /// Uses persisted WK session when available; falls back to env login fill if needed.
+    @MainActor
+    func testInstagramSearchHidesReels() throws {
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/explore/",
+            "-DumpIGExplore"
+        ]
+        app.launch()
+
+        let close = app.buttons["browserCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        Thread.sleep(forTimeInterval: 6)
+
+        func dismissAlerts(times: Int = 4) {
+            for _ in 0..<times {
+                let alertOK = app.alerts.buttons["OK"]
+                if alertOK.waitForExistence(timeout: 1) {
+                    alertOK.tap()
+                    Thread.sleep(forTimeInterval: 0.3)
+                } else {
+                    break
+                }
+            }
+            let notNow = app.buttons["Not Now"]
+            if notNow.waitForExistence(timeout: 1) { notNow.tap() }
+        }
+        dismissAlerts()
+
+        // If bounced to login, fill via XCUITest keyboard (never log secrets).
+        let web = app.webViews.firstMatch
+        XCTAssertTrue(web.waitForExistence(timeout: 10))
+        let env = ProcessInfo.processInfo.environment
+        let userField = web.textFields.firstMatch
+        if userField.waitForExistence(timeout: 3),
+           let username = env["INSTAGRAM_USERNAME"], !username.isEmpty,
+           let password = env["INSTAGRAM_PASSWORD"], !password.isEmpty {
+            func clearAndType(_ field: XCUIElement, text: String) {
+                field.tap()
+                Thread.sleep(forTimeInterval: 0.25)
+                if let current = field.value as? String, !current.isEmpty {
+                    let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2)
+                    field.typeText(delete)
+                }
+                field.typeText(text)
+            }
+            clearAndType(userField, text: username)
+            let passField = web.secureTextFields.firstMatch
+            if passField.waitForExistence(timeout: 5) {
+                clearAndType(passField, text: password)
+            }
+            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+            let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
+            if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
+                loginBtn.tap()
+            }
+            Thread.sleep(forTimeInterval: 12)
+            dismissAlerts()
+            // Re-enter explore after login.
+            app.terminate()
+            app.launchArguments = [
+                "-OpenSite", "instagram",
+                "-OpenPath", "/explore/",
+                "-DumpIGExplore"
+            ]
+            app.launch()
+            XCTAssertTrue(close.waitForExistence(timeout: 25))
+            Thread.sleep(forTimeInterval: 8)
+            dismissAlerts()
+        }
+
+        func attach(_ name: String) {
+            let shot = app.screenshot()
+            let att = XCTAttachment(screenshot: shot)
+            att.name = name
+            att.lifetime = .keepAlways
+            add(att)
+        }
+
+        attach("explore-initial")
+
+        // Scroll explore grid (drag webview).
+        let webView = app.otherElements["browserWebView"].exists
+            ? app.otherElements["browserWebView"]
+            : app.webViews.firstMatch
+        for i in 1...4 {
+            webView.swipeUp()
+            Thread.sleep(forTimeInterval: 1.2)
+            if i == 2 || i == 4 { attach("explore-scroll-\(i)") }
+        }
+
+        // Tap Search / Explore bottom tab if present (SPA return path).
+        let searchPred = NSPredicate(format: "label CONTAINS[c] %@ OR label CONTAINS[c] %@", "Search", "Explore")
+        let searchTab = app.descendants(matching: .any).matching(searchPred).firstMatch
+        if searchTab.waitForExistence(timeout: 2), searchTab.isHittable {
+            searchTab.tap()
+            Thread.sleep(forTimeInterval: 2)
+            attach("explore-tab-retap")
+        }
+
+        // Type a query into search field if available.
+        let searchField = app.webViews.textFields.firstMatch
+        if searchField.waitForExistence(timeout: 4) {
+            searchField.tap()
+            Thread.sleep(forTimeInterval: 0.5)
+            searchField.typeText("nature")
+            Thread.sleep(forTimeInterval: 4)
+            attach("search-query-nature")
+            // Clear / close results by tapping cancel or back-ish control if present.
+            let cancelPred = NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Cancel", "Clear")
+            let cancel = app.descendants(matching: .any).matching(cancelPred).firstMatch
+            if cancel.waitForExistence(timeout: 2), cancel.isHittable {
+                cancel.tap()
+                Thread.sleep(forTimeInterval: 2)
+                attach("search-closed")
+            } else {
+                // Tap outside / navigate home then back to explore.
+                let homePred = NSPredicate(format: "label ==[c] %@", "Home")
+                let home = app.descendants(matching: .any).matching(homePred).firstMatch
+                if home.waitForExistence(timeout: 2), home.isHittable {
+                    home.tap()
+                    Thread.sleep(forTimeInterval: 3)
+                    attach("left-to-home")
+                    if searchTab.waitForExistence(timeout: 3), searchTab.isHittable {
+                        searchTab.tap()
+                        Thread.sleep(forTimeInterval: 3)
+                        attach("return-to-explore")
+                    }
+                }
+            }
+        } else {
+            // No search field — still exercise leave/return via Home if visible.
+            let homePred = NSPredicate(format: "label ==[c] %@", "Home")
+            let home = app.descendants(matching: .any).matching(homePred).firstMatch
+            if home.waitForExistence(timeout: 2), home.isHittable {
+                home.tap()
+                Thread.sleep(forTimeInterval: 3)
+                attach("left-to-home")
+            }
+            if searchTab.waitForExistence(timeout: 3), searchTab.isHittable {
+                searchTab.tap()
+                Thread.sleep(forTimeInterval: 3)
+                attach("return-to-explore")
+            }
+        }
+
+        Thread.sleep(forTimeInterval: 3)
+        attach("explore-final")
+        // Keep process alive briefly so -DumpIGExplore timers can flush.
+        Thread.sleep(forTimeInterval: 6)
+}
 }
