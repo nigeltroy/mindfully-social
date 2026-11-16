@@ -17,6 +17,11 @@ struct UsageTime: Hashable {
         return "\(minutes)m"
     }
 
+    /// Short caption under the time for scanability.
+    var caption: String {
+        dailyMinutes <= 0 ? "today" : "today"
+    }
+
     static let placeholder = UsageTime(dailyMinutes: 0)
 }
 
