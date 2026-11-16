@@ -9,7 +9,6 @@ private enum HomePalette {
     static let primaryText = Color(white: 0.93)
     static let secondaryText = Color(white: 0.58)
     static let tertiaryText = Color(white: 0.42)
-    static let brandGreenSoft = Color(red: 0.22, green: 0.72, blue: 0.18).opacity(0.18)
     static let gearFill = Color.white.opacity(0.08)
     static let rowDivider = Color.white.opacity(0.07)
 }
@@ -41,7 +40,7 @@ struct HomeView: View {
                                 Rectangle()
                                     .fill(HomePalette.rowDivider)
                                     .frame(height: 1)
-                                    .padding(.leading, 78)
+                                    .padding(.leading, 72)
                             }
                         }
                     }
@@ -95,16 +94,11 @@ private struct SiteRowView: View {
         HStack(alignment: .center, spacing: 12) {
             Button(action: onOpen) {
                 HStack(alignment: .center, spacing: 14) {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(HomePalette.brandGreenSoft)
-                            .frame(width: 52, height: 52)
-                        Image(site.iconAssetName)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 44, height: 44)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    }
+                    Image(site.iconAssetName)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 44, height: 44)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     Text(site.name)
                         .font(.body.weight(.semibold))
