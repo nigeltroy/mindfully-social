@@ -22,6 +22,32 @@ enum InstagramStoryAdSkip {
     return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
   }
 
+  function looksLikeStoryChrome(root) {
+    if (!root || !root.querySelector) return false;
+    // Progress segments: a header row of short bars near the top.
+    var header = root.querySelector('header') || root;
+    var close = root.querySelector(
+      '[aria-label*="Close" i], [aria-label*="Next" i], [aria-label*="Go back" i], [aria-label*="Back" i]'
+    );
+    var segs = header.querySelectorAll('div, span');
+    var barish = 0;
+    for (var i = 0; i < segs.length && barish < 8; i++) {
+      try {
+        var r = segs[i].getBoundingClientRect();
+        if (r.top < 90 && r.height > 1 && r.height < 8 && r.width > 12 && r.width < window.innerWidth * 0.5) {
+          barish++;
+        }
+      } catch (e) {}
+    }
+    if (barish >= 2 && close) return true;
+    if (barish >= 3) return true;
+    // Reply composer is common in story viewer chrome.
+    if (close && root.querySelector('textarea, [aria-label*="Reply" i], [placeholder*="Reply" i], [placeholder*="Send message" i]')) {
+      return true;
+    }
+    return false;
+  }
+
   function inStoryViewer() {
     var path = location.pathname || '';
     if (/\/stories\//i.test(path)) return true;
@@ -36,11 +62,17 @@ enum InstagramStoryAdSkip {
       var html = '';
       try { html = (d.innerHTML || '').slice(0, 4000); } catch (e2) {}
       if (/\/stories\//i.test(html)) return true;
-      // Progress segments across the top + a close control are strong story-viewer signals.
-      var header = d.querySelector('header');
-      if (header && d.querySelector('[aria-label*="Close" i], [aria-label*="Next" i], [aria-label*="Go back" i]')) {
-        return true;
-      }
+      if (looksLikeStoryChrome(d)) return true;
+    }
+    // Fallback: some IG web builds render the viewer as a fixed full-bleed section.
+    var sections = document.querySelectorAll('section, main > div');
+    for (var s = 0; s < sections.length; s++) {
+      var el = sections[s];
+      try {
+        var br = el.getBoundingClientRect();
+        if (br.width < window.innerWidth * 0.85 || br.height < window.innerHeight * 0.75) continue;
+      } catch (e3) { continue; }
+      if (looksLikeStoryChrome(el)) return true;
     }
     return false;
   }
@@ -267,7 +299,7 @@ enum InstagramStoryAdSkip {
         hits: hits.slice(0, 8).map(function (h) { return { kind: h.kind, text: h.text }; }),
         interestingLabels: labels,
         stats: this.stats,
-        scriptCanary: 'storyadskip-v1'
+        scriptCanary: 'storyadskip-v2'
       };
     }
   };

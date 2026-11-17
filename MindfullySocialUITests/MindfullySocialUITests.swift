@@ -621,54 +621,41 @@ final class MindfullySocialUITests: XCTestCase {
         }
 
         var opened = false
-        // Prefer known tray account labels from this session (avoid "Your story").
-        for name in ["theonion", "cbc", "Onion", "CBC"] {
-            let pred = NSPredicate(format: "label CONTAINS[c] %@", name)
-            let el = app.descendants(matching: .any).matching(pred).firstMatch
-            if el.waitForExistence(timeout: 2), el.isHittable {
-                el.tap()
-                Thread.sleep(forTimeInterval: 2.8)
-                dismissIGAlerts(in: app)
-                dismissFilePickerIfPresent()
-                attach("stories-open-\(name)")
-                opened = true
-                break
-            }
+        // Prefer a11y labels that include both account + "Story" (not feed posts).
+        let ringPred = NSPredicate(
+            format: "label CONTAINS[c] %@ AND NOT label CONTAINS[c] %@",
+            "Story",
+            "Your story"
+        )
+        let rings = app.descendants(matching: .any).matching(ringPred)
+        for idx in 0..<min(rings.count, 6) {
+            let btn = rings.element(boundBy: idx)
+            guard btn.waitForExistence(timeout: 1), btn.isHittable else { continue }
+            let label = (btn.label as String?) ?? ""
+            if label.localizedCaseInsensitiveContains("Plus icon") { continue }
+            btn.tap()
+            Thread.sleep(forTimeInterval: 2.8)
+            dismissIGAlerts(in: app)
+            dismissFilePickerIfPresent()
+            attach("stories-open-ring-\(idx)")
+            opened = true
+            break
         }
         if !opened {
-            let storyButtons = app.descendants(matching: .any).matching(
-                NSPredicate(format: "label CONTAINS[c] %@", "Story")
-            )
-            let storyCount = storyButtons.count
-            for idx in 0..<min(storyCount, 8) {
-                let btn = storyButtons.element(boundBy: idx)
-                guard btn.waitForExistence(timeout: 1) else { continue }
-                let label = (btn.label as String?) ?? ""
-                if label.localizedCaseInsensitiveContains("Your story") { continue }
-                if label.localizedCaseInsensitiveContains("Plus icon") { continue }
-                guard btn.isHittable else { continue }
-                btn.tap()
-                Thread.sleep(forTimeInterval: 2.5)
-                dismissIGAlerts(in: app)
-                dismissFilePickerIfPresent()
-                attach("stories-open-\(idx)")
-                opened = true
-                break
-            }
-        }
-        if !opened {
-            // Coordinate fallback: skip leftmost "Your story"; hit 2nd/3rd rings.
+            // Coordinate tray rings: skip leftmost "Your story"; hit 2nd/3rd/4th.
             let points: [(CGFloat, CGFloat)] = [
-                (0.34, 0.20), (0.46, 0.20), (0.58, 0.20),
-                (0.34, 0.23), (0.46, 0.23)
+                (0.30, 0.175), (0.42, 0.175), (0.54, 0.175),
+                (0.30, 0.20), (0.42, 0.20)
             ]
             for (x, y) in points {
                 app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
-                Thread.sleep(forTimeInterval: 2.4)
+                Thread.sleep(forTimeInterval: 2.6)
                 dismissIGAlerts(in: app)
                 dismissFilePickerIfPresent()
                 attach(String(format: "stories-tap-x%.0f-y%.0f", x * 100, y * 100))
                 opened = true
+                // Stop after first coordinate attempt batch item — still try a couple.
+                if y >= 0.20 { break }
             }
         }
 
