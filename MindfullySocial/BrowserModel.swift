@@ -322,9 +322,18 @@ final class BrowserModel: ObservableObject {
         for delay in delays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.applyStoryAdSkipLaunchFlagsIfNeeded()
+                self?.maybeSimulateStoryAdIfRequested()
                 self?.writeStoryAdSkipDump(suffix: String(Int(delay)))
             }
         }
+    }
+
+    /// `-SimulateStoryAd` → plant a Sponsored label inside the story viewer (Tart mechanism proof).
+    private func maybeSimulateStoryAdIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-SimulateStoryAd") else { return }
+        let js = #"(function(){try{if(window.__msaStoryAdSkip&&window.__msaStoryAdSkip.simulateSponsored){return window.__msaStoryAdSkip.simulateSponsored();}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
     private func applyStoryAdSkipLaunchFlagsIfNeeded() {

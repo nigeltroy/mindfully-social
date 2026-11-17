@@ -537,7 +537,9 @@ final class MindfullySocialUITests: XCTestCase {
     @MainActor
     func testInstagramStoryAdSkip() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGStories"]
+        // -SimulateStoryAd plants a Sponsored marker once a real story viewer is open
+        // so we can prove auto-advance even when IG serves no live story ads.
+        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGStories", "-SimulateStoryAd"]
         app.launch()
 
         waitForBrowser(in: app, timeout: 25)

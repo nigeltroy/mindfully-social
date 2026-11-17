@@ -270,6 +270,23 @@ enum InstagramStoryAdSkip {
     setEnabled: function (on) {
       this.enabled = !!on;
     },
+    // Tart-only helper: plant a Sponsored label in the story chrome to exercise skip.
+    simulateSponsored: function () {
+      try {
+        if (!inStoryViewer()) return 'not-in-story';
+        var root = storyRoot();
+        var host = (root && root.querySelector('header')) || root || document.body;
+        var el = document.createElement('span');
+        el.setAttribute('data-msa-sim-sponsored', '1');
+        el.textContent = 'Sponsored';
+        el.style.cssText = 'display:inline-block;font-size:12px;color:#fff;margin-left:6px;';
+        host.appendChild(el);
+        maybeSkip();
+        return 'planted';
+      } catch (e) {
+        return String(e);
+      }
+    },
     dump: function () {
       var root = null;
       var inStory = false;
@@ -299,7 +316,7 @@ enum InstagramStoryAdSkip {
         hits: hits.slice(0, 8).map(function (h) { return { kind: h.kind, text: h.text }; }),
         interestingLabels: labels,
         stats: this.stats,
-        scriptCanary: 'storyadskip-v2'
+        scriptCanary: 'storyadskip-v3'
       };
     }
   };
