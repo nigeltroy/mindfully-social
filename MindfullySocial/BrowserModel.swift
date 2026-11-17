@@ -193,6 +193,48 @@ final class BrowserModel: ObservableObject {
                 self?.writeExploreDump(suffix: String(Int(delay)))
             }
         }
+        // Optional Tart search-results proof: `-IGSearchQuery nature`
+        if let idx = args.firstIndex(of: "-IGSearchQuery"),
+           args.index(after: idx) < args.endIndex {
+            let query = args[args.index(after: idx)]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+                self?.typeExploreSearchQuery(query)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 16) { [weak self] in
+                self?.writeExploreDump(suffix: "search")
+            }
+        }
+    }
+
+    /// Focus Explore search and type a query via DOM (XCUITest often misses the field).
+    private func typeExploreSearchQuery(_ query: String) {
+        let escaped = query
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "'", with: "\\'")
+        let js = """
+        (function () {
+          try {
+            var q = '\(escaped)';
+            var inputs = document.querySelectorAll(
+              'input[placeholder*="Search" i], input[aria-label*="Search" i], input[type="search"], input[name="search"]'
+            );
+            var input = inputs[0];
+            if (!input) return 'no_input';
+            input.focus();
+            input.click();
+            var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+            if (setter && setter.set) setter.set.call(input, q);
+            else input.value = q;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+            input.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true, key: 'a' }));
+            return 'typed:' + (input.value || '').slice(0, 40);
+          } catch (e) { return String(e); }
+        })()
+        """
+        webView.evaluateJavaScript(js) { result, _ in
+            NSLog("MSA IGSearchQuery: %@", String(describing: result))
+        }
     }
 
     private func writeExploreDump(suffix: String) {
