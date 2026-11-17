@@ -5,20 +5,22 @@ final class MindfullySocialUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// Focused Reddit proof: home row → open reddit.com sheet → swipe dismiss.
+    /// Focused Reddit proof: home → tap → settled reddit.com → swipe dismiss → home.
     @MainActor
     func testRedditOpenAndDismiss() throws {
         let app = XCUIApplication()
         app.launch()
 
         let title = app.staticTexts["appTitle"]
-        XCTAssertTrue(title.waitForExistence(timeout: 15))
+        XCTAssertTrue(title.waitForExistence(timeout: 20))
 
         let reddit = app.buttons["site-reddit"]
-        XCTAssertTrue(reddit.waitForExistence(timeout: 8))
+        XCTAssertTrue(reddit.waitForExistence(timeout: 10))
         XCTAssertTrue(app.staticTexts["usage-reddit"].exists)
         XCTAssertTrue(app.buttons["settings-reddit"].exists)
 
+        // Hold on home so continuous video captures the Reddit row.
+        Thread.sleep(forTimeInterval: 2)
         let homeShot = app.screenshot()
         let homeAtt = XCTAttachment(screenshot: homeShot)
         homeAtt.name = "reddit-home-list"
@@ -26,17 +28,18 @@ final class MindfullySocialUITests: XCTestCase {
         add(homeAtt)
 
         reddit.tap()
-        waitForBrowser(in: app, timeout: 20)
-        // Allow reddit.com to paint past the dark splash.
-        Thread.sleep(forTimeInterval: 12)
+        waitForBrowser(in: app, timeout: 25)
+        // reddit.com needs ~10s+ past dark/white splash under Tart load.
+        Thread.sleep(forTimeInterval: 16)
         let openShot = app.screenshot()
         let openAtt = XCTAttachment(screenshot: openShot)
-        openAtt.name = "reddit-open"
+        openAtt.name = "reddit-open-content"
         openAtt.lifetime = .keepAlways
         add(openAtt)
 
         dismissBrowser(in: app)
-        XCTAssertTrue(title.waitForExistence(timeout: 12))
+        XCTAssertTrue(title.waitForExistence(timeout: 15), "swipe dismiss did not return home")
+        Thread.sleep(forTimeInterval: 1.5)
         let afterShot = app.screenshot()
         let afterAtt = XCTAttachment(screenshot: afterShot)
         afterAtt.name = "reddit-after-dismiss"
