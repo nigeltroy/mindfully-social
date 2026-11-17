@@ -607,28 +607,67 @@ final class MindfullySocialUITests: XCTestCase {
 
         attach("stories-home")
 
-        // Open first story ring in the tray (upper-left band under status).
-        // Prefer labeled Story buttons; fall back to coordinate taps across the tray.
+        // Open a *followed* story ring — never "Your story" (that opens the file picker).
+        func dismissFilePickerIfPresent() {
+            let cancel = app.buttons["Cancel"]
+            if cancel.waitForExistence(timeout: 1), cancel.isHittable {
+                cancel.tap()
+                Thread.sleep(forTimeInterval: 0.6)
+                return
+            }
+            // Tap outside the Photo Library / Choose File popover.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+
         var opened = false
-        let storyPred = NSPredicate(format: "label CONTAINS[c] %@", "Story")
-        let storyBtn = app.descendants(matching: .any).matching(storyPred).firstMatch
-        if storyBtn.waitForExistence(timeout: 4), storyBtn.isHittable {
-            storyBtn.tap()
-            opened = true
+        // Prefer known tray account labels from this session (avoid "Your story").
+        for name in ["theonion", "cbc", "Onion", "CBC"] {
+            let pred = NSPredicate(format: "label CONTAINS[c] %@", name)
+            let el = app.descendants(matching: .any).matching(pred).firstMatch
+            if el.waitForExistence(timeout: 2), el.isHittable {
+                el.tap()
+                Thread.sleep(forTimeInterval: 2.8)
+                dismissIGAlerts(in: app)
+                dismissFilePickerIfPresent()
+                attach("stories-open-\(name)")
+                opened = true
+                break
+            }
         }
         if !opened {
-            // Stories tray sits under the IG wordmark (below swipe tip). Try several
-            // avatar slots + vertical bands — first ring is often "Your story".
+            let storyButtons = app.descendants(matching: .any).matching(
+                NSPredicate(format: "label CONTAINS[c] %@", "Story")
+            )
+            let storyCount = storyButtons.count
+            for idx in 0..<min(storyCount, 8) {
+                let btn = storyButtons.element(boundBy: idx)
+                guard btn.waitForExistence(timeout: 1) else { continue }
+                let label = (btn.label as String?) ?? ""
+                if label.localizedCaseInsensitiveContains("Your story") { continue }
+                if label.localizedCaseInsensitiveContains("Plus icon") { continue }
+                guard btn.isHittable else { continue }
+                btn.tap()
+                Thread.sleep(forTimeInterval: 2.5)
+                dismissIGAlerts(in: app)
+                dismissFilePickerIfPresent()
+                attach("stories-open-\(idx)")
+                opened = true
+                break
+            }
+        }
+        if !opened {
+            // Coordinate fallback: skip leftmost "Your story"; hit 2nd/3rd rings.
             let points: [(CGFloat, CGFloat)] = [
-                (0.28, 0.19), (0.40, 0.19), (0.52, 0.19),
-                (0.28, 0.22), (0.40, 0.22), (0.22, 0.20)
+                (0.34, 0.20), (0.46, 0.20), (0.58, 0.20),
+                (0.34, 0.23), (0.46, 0.23)
             ]
             for (x, y) in points {
                 app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
                 Thread.sleep(forTimeInterval: 2.4)
                 dismissIGAlerts(in: app)
+                dismissFilePickerIfPresent()
                 attach(String(format: "stories-tap-x%.0f-y%.0f", x * 100, y * 100))
-                // Keep going through candidates; later dumps show /stories/ if any hit.
                 opened = true
             }
         }
