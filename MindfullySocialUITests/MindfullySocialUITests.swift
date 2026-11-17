@@ -621,34 +621,50 @@ final class MindfullySocialUITests: XCTestCase {
         dismissIGAlerts(in: app)
         attach("stories-deeplink-theonion")
 
-        // If deeplink bounced to login/home, fall back to tray coordinates (skip Your story).
-        let points: [(CGFloat, CGFloat)] = [
-            (0.30, 0.175), (0.42, 0.175), (0.54, 0.175)
-        ]
-        for (x, y) in points {
-            app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
-            Thread.sleep(forTimeInterval: 2.0)
+        // IG web often gates with "View as <user>?" — must confirm to play.
+        let viewStoryPred = NSPredicate(format: "label ==[c] %@", "View story")
+        let viewStory = app.descendants(matching: .any).matching(viewStoryPred).firstMatch
+        if viewStory.waitForExistence(timeout: 6) {
+            if viewStory.isHittable {
+                viewStory.tap()
+            } else {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.58)).tap()
+            }
+            Thread.sleep(forTimeInterval: 2.5)
             dismissIGAlerts(in: app)
+            attach("stories-view-confirmed")
+        } else {
+            // Fallback tray rings if deeplink bounced home.
+            for (x, y) in [(0.30, 0.175), (0.42, 0.175), (0.54, 0.175)] as [(CGFloat, CGFloat)] {
+                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+                Thread.sleep(forTimeInterval: 1.8)
+                dismissIGAlerts(in: app)
+            }
         }
         attach("stories-opened")
 
-        // Advance through several story items so a sponsored ad (if present) is hit.
-        // Auto-skip should fire without taps when an ad is detected; we still nudge
-        // forward occasionally to reach ads between organic stories.
-        for i in 1...14 {
-            // Right-side tap advances organic stories; ads should already be skipped by JS.
+        // Advance through many items / users so a between-user Sponsored story can appear.
+        // Auto-skip fires without taps when an ad is detected; we still nudge forward.
+        for i in 1...36 {
             app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.48)).tap()
-            Thread.sleep(forTimeInterval: 1.35)
+            Thread.sleep(forTimeInterval: 1.15)
             dismissIGAlerts(in: app)
-            if i == 2 || i == 5 || i == 8 || i == 11 || i == 14 {
+            // Occasional left-edge swipe-ish drag to next account in the tray sequence.
+            if i % 7 == 0 {
+                let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.50))
+                let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.50))
+                start.press(forDuration: 0.05, thenDragTo: end)
+                Thread.sleep(forTimeInterval: 1.2)
+            }
+            if [2, 6, 12, 18, 24, 30, 36].contains(i) {
                 attach("stories-advance-\(i)")
             }
         }
 
         Thread.sleep(forTimeInterval: 4)
         attach("stories-final")
-        // Allow dump timers (up to ~48s from launch) — we are already past most.
-        Thread.sleep(forTimeInterval: 8)
+        // Keep alive for late dump timers (up to ~230s from this launch).
+        Thread.sleep(forTimeInterval: 20)
     }
 
     /// Fresh-simulator Instagram login only (for iPhone 17e / isolated sims).
