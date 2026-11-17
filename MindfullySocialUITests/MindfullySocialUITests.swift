@@ -504,6 +504,86 @@ final class MindfullySocialUITests: XCTestCase {
         add(resultAtt)
     }
 
+    /// MSA-21: before (promo visible) → after (promo hidden) with scroll/nav coverage.
+    @MainActor
+    func testInstagramAppPromoHideProof() throws {
+        let app = XCUIApplication()
+
+        // --- BEFORE: leave “Use the app” visible ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-DisableAppPromoHide",
+            "-DumpIGAppPromo"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 10)
+        dismissIGAlerts(in: app)
+
+        let beforeTop = XCTAttachment(screenshot: app.screenshot())
+        beforeTop.name = "app-promo-before-top"
+        beforeTop.lifetime = .keepAlways
+        add(beforeTop)
+
+        for _ in 0..<4 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        Thread.sleep(forTimeInterval: 2)
+        dismissIGAlerts(in: app)
+
+        let beforeScroll = XCTAttachment(screenshot: app.screenshot())
+        beforeScroll.name = "app-promo-before-scroll"
+        beforeScroll.lifetime = .keepAlways
+        add(beforeScroll)
+
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+
+        // --- AFTER: hide enabled ---
+        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGAppPromo"]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 10)
+        dismissIGAlerts(in: app)
+
+        let afterTop = XCTAttachment(screenshot: app.screenshot())
+        afterTop.name = "app-promo-after-top"
+        afterTop.lifetime = .keepAlways
+        add(afterTop)
+
+        for _ in 0..<6 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        Thread.sleep(forTimeInterval: 3)
+        dismissIGAlerts(in: app)
+
+        let afterScroll = XCTAttachment(screenshot: app.screenshot())
+        afterScroll.name = "app-promo-after-scroll"
+        afterScroll.lifetime = .keepAlways
+        add(afterScroll)
+
+        // Search / Explore then back Home — banner must stay gone.
+        let searchTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.37, dy: 0.93))
+        searchTap.tap()
+        Thread.sleep(forTimeInterval: 5)
+        dismissIGAlerts(in: app)
+        let afterSearch = XCTAttachment(screenshot: app.screenshot())
+        afterSearch.name = "app-promo-after-search"
+        afterSearch.lifetime = .keepAlways
+        add(afterSearch)
+
+        let homeTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.93))
+        homeTap.tap()
+        Thread.sleep(forTimeInterval: 5)
+        dismissIGAlerts(in: app)
+        let afterHome = XCTAttachment(screenshot: app.screenshot())
+        afterHome.name = "app-promo-after-home"
+        afterHome.lifetime = .keepAlways
+        add(afterHome)
+    }
+
     @MainActor
     private func waitForBrowser(in app: XCUIApplication, timeout: TimeInterval = 25) {
         let web = app.otherElements["browserWebView"]

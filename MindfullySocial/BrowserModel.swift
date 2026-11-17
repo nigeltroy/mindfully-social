@@ -12,6 +12,7 @@ final class BrowserModel: ObservableObject {
     private var observations: [NSKeyValueObservation] = []
     private var installedTweaksSiteID: String?
     private var feedDumpTimer: Timer?
+    private var appPromoDumpTimer: Timer?
 
     init() {
         let config = WKWebViewConfiguration()
@@ -41,6 +42,7 @@ final class BrowserModel: ObservableObject {
                     self?.titleText = webView.title ?? webView.url?.host ?? ""
                     self?.canGoBack = webView.canGoBack
                     self?.applyFeedHideLaunchFlagsIfNeeded()
+                    self?.applyAppPromoHideLaunchFlagsIfNeeded()
                 }
             }
         })
@@ -54,7 +56,8 @@ final class BrowserModel: ObservableObject {
     }
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
-    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-19 Search/Explore Reels hide.
+    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-19 Search/Explore Reels hide
+    /// + MSA-21 app-promo / use-the-app interstitial hide.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -64,7 +67,8 @@ final class BrowserModel: ObservableObject {
         let sources = [
             InstagramChromeTweaks.userScriptSource,
             InstagramChromeTweaks.feedHideUserScriptSource,
-            InstagramSearchReelsHide.searchReelsHideUserScriptSource
+            InstagramSearchReelsHide.searchReelsHideUserScriptSource,
+            InstagramAppPromoHide.userScriptSource
         ]
         for source in sources {
             let script = WKUserScript(
@@ -195,6 +199,55 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-explore-dump-\(suffix).json")
             try? body.write(to: url, atomically: true, encoding: .utf8)
             NSLog("MSA ExploreDump: wrote %@", url.lastPathComponent)
+        }
+    }
+
+    /// Tart proof helpers:
+    /// `-DisableAppPromoHide` → leave “Use the app” banners visible for before shots
+    /// `-DumpIGAppPromo` → write Documents/msa-app-promo-dump.json periodically
+    func startAppPromoProbeIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGAppPromo") || args.contains("-DisableAppPromoHide") else { return }
+        applyAppPromoHideLaunchFlagsIfNeeded()
+        guard args.contains("-DumpIGAppPromo") else { return }
+        appPromoDumpTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.writeAppPromoDump()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        appPromoDumpTimer = timer
+        for delay in [4.0, 8.0, 14.0, 22.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.writeAppPromoDump()
+            }
+        }
+    }
+
+    private func applyAppPromoHideLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableAppPromoHide") else { return }
+        let js = #"(function(){try{if(window.__msaAppPromo&&window.__msaAppPromo.setEnabled){window.__msaAppPromo.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func writeAppPromoDump() {
+        webView.evaluateJavaScript(InstagramAppPromoHide.dumpScript) { result, error in
+            let payload: String
+            if let error {
+                payload = "{\"error\":\"evaluate:\(String(describing: error))\"}"
+            } else if let s = result as? String {
+                payload = s
+            } else {
+                payload = "{\"error\":\"non_string_result\"}"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-app-promo-dump.json")
+            try? payload.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("AppPromoDump: wrote %d bytes", payload.utf8.count)
         }
     }
 }
