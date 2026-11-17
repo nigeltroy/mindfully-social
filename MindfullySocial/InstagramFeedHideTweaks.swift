@@ -224,42 +224,43 @@ extension InstagramChromeTweaks {
     if (article.querySelector('[data-ad-preview="message"], [data-ad-rendering-role], [data-ad-media]')) {
       return true;
     }
-    // First ~160 chars of article text often contain “Ad” / “Sponsored” in the header.
-    var head = normText((article.innerText || '').slice(0, 160));
-    if (/(^|[^a-z])ad([^a-z]|$)/.test(head) || head.indexOf('sponsored') !== -1 ||
+    // First ~200 chars — covers "redditforbusiness Ad Learn more" / "cliniquecanada Ad Shop now".
+    var head = normText((article.innerText || article.textContent || '').slice(0, 200));
+    if (/\bad\b/.test(head) || head.indexOf('sponsored') !== -1 ||
         head.indexOf('paid partnership') !== -1) {
       return true;
     }
-    // Header strip node walk — avoid caption false positives deeper in the post.
-    var headerBudget = 0;
+    // Exact short “Ad” / “Sponsored” nodes anywhere in the article chrome
+    // (interestingLabels already sees these; leafishText alone can miss wrappers).
     var nodes = article.querySelectorAll('span, a, div, h1, h2, h3');
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
-      var raw = leafishText(el);
-      if (!raw) {
-        var full = el.textContent || '';
-        if (normText(full).length > 0 && normText(full).length <= 24) raw = full;
-      }
-      var t = normText(raw);
-      if (!t || t.length > 24) continue;
-      try {
-        var lr = el.getBoundingClientRect();
-        var ar = article.getBoundingClientRect();
-        if (ar.height > 0 && (lr.top - ar.top) > 160) continue;
-      } catch (e) {}
+      var full = el.textContent || '';
+      if (full.length === 0 || full.length > 24) continue;
+      var t = normText(full);
       if (t === 'ad' || t === 'sponsored' || t === 'promoted' || t.indexOf('paid partnership') === 0) {
         return true;
       }
-      headerBudget++;
-      if (headerBudget > 100) break;
     }
     return false;
   }
 
   function articleLooksSuggested(article) {
-    var head = normText((article.innerText || '').slice(0, 180));
-    return head.indexOf('suggested for you') !== -1 ||
-      head.indexOf('suggestions for you') !== -1;
+    var head = normText((article.innerText || article.textContent || '').slice(0, 200));
+    if (head.indexOf('suggested for you') !== -1 || head.indexOf('suggestions for you') !== -1) {
+      return true;
+    }
+    var nodes = article.querySelectorAll('span, a, div, h1, h2, h3');
+    for (var i = 0; i < nodes.length; i++) {
+      var full = nodes[i].textContent || '';
+      if (full.length === 0 || full.length > 40) continue;
+      var t = normText(full);
+      if (t === 'suggested for you' || t === 'suggestions for you' ||
+          t.indexOf('suggestions for you') === 0 || t.indexOf('suggested for you') === 0) {
+        return true;
+      }
+    }
+    return false;
   }
 
   function scanArticlesForAdAttrs(root) {
@@ -404,7 +405,7 @@ extension InstagramChromeTweaks {
         markedReasons: reasons,
         liveLabelHits: labels,
         articleDiag: articleDiag,
-        scriptCanary: 'feedhide-v3',
+        scriptCanary: 'feedhide-v4',
         path: location.pathname,
         sampleText: (function () {
           try {
