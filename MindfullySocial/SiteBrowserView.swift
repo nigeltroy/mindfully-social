@@ -1,96 +1,64 @@
 import SwiftUI
 
-private enum BrowserChromePalette {
-    static let bar = Color(white: 0.11)
-    static let primary = Color(white: 0.93)
-    static let secondary = Color(white: 0.58)
-}
-
 struct SiteBrowserView: View {
     let site: Site
     let onClose: () -> Void
 
     @StateObject private var model = BrowserModel()
-    @State private var usage = UsageTime.placeholder
-    @State private var usageTick: Timer?
+    @State private var showSwipeTip = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Text(usage.displayString)
-                    .font(.footnote.monospacedDigit().weight(.medium))
-                    .foregroundStyle(BrowserChromePalette.secondary)
-                    .frame(minWidth: 44, alignment: .leading)
-                    .accessibilityIdentifier("browserUsageTime")
-
-                Spacer(minLength: 0)
-
-                Button {
-                    finishAndClose()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(BrowserChromePalette.primary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("browserCloseButton")
-                .accessibilityLabel("Close")
-            }
-            // Symmetric inset aligned with home cards (~20 visual with safe area).
-            .padding(.horizontal, 16)
-            .frame(height: 44)
-            .background(BrowserChromePalette.bar)
-
+        ZStack(alignment: .top) {
             WebView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("browserWebView")
+
+            if showSwipeTip {
+                Text("Swipe down to leave")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(Color(white: 0.93))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color(white: 0.16).opacity(0.92))
+                            .overlay(
+                                Capsule(style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                    )
+                    .padding(.top, 12)
+                    .accessibilityIdentifier("browserSwipeTip")
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .allowsHitTesting(false)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.11))
-        // Consume bottom safe-area so WKWebView reaches the home indicator.
-        .ignoresSafeArea(edges: .bottom)
+        // Full-bleed into top and bottom safe areas (Instagram/YouTube chrome owns insets).
+        .ignoresSafeArea()
         .preferredColorScheme(.dark)
         .onAppear {
             model.installSiteTweaks(for: site.id)
             model.startFeedHideProbeIfRequested()
             UsageTimeStore.beginSession(for: site.id)
-            refreshUsage()
-            startUsageTicker()
             model.load(url: resolveLaunchURL(for: site))
             model.startExploreDumpIfRequested()
+            scheduleSwipeTipHide()
         }
         .onDisappear {
-            stopUsageTicker()
             UsageTimeStore.endSession(for: site.id)
         }
     }
 
-    private func refreshUsage() {
-        usage = UsageTimeStore.daily(for: site.id)
-    }
-
-    private func startUsageTicker() {
-        stopUsageTicker()
-        let timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in
-            Task { @MainActor in
-                refreshUsage()
+    private func scheduleSwipeTipHide() {
+        showSwipeTip = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            withAnimation(.easeOut(duration: 0.35)) {
+                showSwipeTip = false
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        usageTick = timer
-    }
-
-    private func stopUsageTicker() {
-        usageTick?.invalidate()
-        usageTick = nil
-    }
-
-    private func finishAndClose() {
-        stopUsageTicker()
-        UsageTimeStore.endSession(for: site.id)
-        onClose()
     }
 
     /// Optional `-OpenPath /explore/` (with `-OpenSite instagram`) for Tart proof.

@@ -30,10 +30,7 @@ final class MindfullySocialUITests: XCTestCase {
         add(homeAttachment)
 
         instagram.tap()
-        let close = app.buttons["browserCloseButton"]
-        XCTAssertTrue(close.waitForExistence(timeout: 15))
-        let web = app.otherElements["browserWebView"]
-        XCTAssertTrue(web.waitForExistence(timeout: 15))
+        waitForBrowser(in: app, timeout: 15)
 
         Thread.sleep(forTimeInterval: 4)
         let igShot = app.screenshot()
@@ -42,11 +39,11 @@ final class MindfullySocialUITests: XCTestCase {
         igAttachment.lifetime = .keepAlways
         add(igAttachment)
 
-        close.tap()
+        dismissBrowser(in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
 
         youtube.tap()
-        XCTAssertTrue(close.waitForExistence(timeout: 15))
+        waitForBrowser(in: app, timeout: 15)
         Thread.sleep(forTimeInterval: 4)
         let ytShot = app.screenshot()
         let ytAttachment = XCTAttachment(screenshot: ytShot)
@@ -54,7 +51,7 @@ final class MindfullySocialUITests: XCTestCase {
         ytAttachment.lifetime = .keepAlways
         add(ytAttachment)
 
-        close.tap()
+        dismissBrowser(in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
     }
 
@@ -68,8 +65,7 @@ final class MindfullySocialUITests: XCTestCase {
         app.launchArguments = ["-OpenSite", "instagram", "-DisableFeedHide", "-DumpIGFeed"]
         app.launch()
 
-        let close = app.buttons["browserCloseButton"]
-        XCTAssertTrue(close.waitForExistence(timeout: 25), "browser chrome missing")
+        waitForBrowser(in: app, timeout: 25)
         // WKWebView accessibility type varies; prefer webViews, fall back to any.
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 20) || app.otherElements["browserWebView"].waitForExistence(timeout: 5))
@@ -101,7 +97,7 @@ final class MindfullySocialUITests: XCTestCase {
         // --- AFTER: feed hide enabled ---
         app.launchArguments = ["-OpenSite", "instagram", "-DumpIGFeed"]
         app.launch()
-        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        waitForBrowser(in: app, timeout: 25)
         _ = web.waitForExistence(timeout: 20)
         Thread.sleep(forTimeInterval: 10)
         dismissIGAlerts(in: app)
@@ -140,13 +136,13 @@ final class MindfullySocialUITests: XCTestCase {
         backHome.lifetime = .keepAlways
         add(backHome)
 
-        // Soft reload via close + reopen.
-        close.tap()
+        // Soft reload via swipe-dismiss + reopen.
+        dismissBrowser(in: app)
         Thread.sleep(forTimeInterval: 1)
         let instagram = app.buttons["site-instagram"]
         XCTAssertTrue(instagram.waitForExistence(timeout: 10))
         instagram.tap()
-        XCTAssertTrue(close.waitForExistence(timeout: 20))
+        waitForBrowser(in: app, timeout: 20)
         Thread.sleep(forTimeInterval: 8)
         let softReload = XCTAttachment(screenshot: app.screenshot())
         softReload.name = "after-soft-reload"
@@ -161,8 +157,7 @@ final class MindfullySocialUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-OpenSite", "instagram", "-DumpIGFeed"]
         app.launch()
-        let close = app.buttons["browserCloseButton"]
-        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        waitForBrowser(in: app, timeout: 25)
         Thread.sleep(forTimeInterval: 12)
         dismissIGAlerts(in: app)
         let top = XCTAttachment(screenshot: app.screenshot())
@@ -213,8 +208,7 @@ final class MindfullySocialUITests: XCTestCase {
         app.launchArguments = ["-OpenSite", "instagram", "-DumpIGExplore"]
         app.launch()
 
-        let close = app.buttons["browserCloseButton"]
-        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        waitForBrowser(in: app, timeout: 25)
         Thread.sleep(forTimeInterval: 6)
 
         func dismissAlerts(times: Int = 4) {
@@ -291,7 +285,7 @@ final class MindfullySocialUITests: XCTestCase {
             "-DumpIGExplore"
         ]
         app.launch()
-        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        waitForBrowser(in: app, timeout: 25)
         Thread.sleep(forTimeInterval: 8)
         dismissAlerts()
         // If still logged out on explore, login once more then reopen explore.
@@ -307,7 +301,7 @@ final class MindfullySocialUITests: XCTestCase {
                 "-DumpIGExplore"
             ]
             app.launch()
-            XCTAssertTrue(close.waitForExistence(timeout: 25))
+            waitForBrowser(in: app, timeout: 25)
             Thread.sleep(forTimeInterval: 8)
             dismissAlerts()
         }
@@ -426,8 +420,7 @@ final class MindfullySocialUITests: XCTestCase {
         app.launchArguments = ["-OpenSite", "instagram"]
         app.launch()
 
-        let close = app.buttons["browserCloseButton"]
-        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        waitForBrowser(in: app, timeout: 25)
         Thread.sleep(forTimeInterval: 8)
 
         func dismissAlerts(times: Int = 5) {
@@ -509,6 +502,30 @@ final class MindfullySocialUITests: XCTestCase {
         resultAtt.name = "login-result"
         resultAtt.lifetime = .keepAlways
         add(resultAtt)
+    }
+
+    @MainActor
+    private func waitForBrowser(in app: XCUIApplication, timeout: TimeInterval = 25) {
+        let web = app.otherElements["browserWebView"]
+        let tip = app.staticTexts["browserSwipeTip"]
+        let ready = web.waitForExistence(timeout: timeout)
+            || tip.waitForExistence(timeout: 2)
+            || app.webViews.firstMatch.waitForExistence(timeout: 5)
+        XCTAssertTrue(ready, "zero-chrome browser did not appear")
+    }
+
+    /// Sheet-style dismiss: drag from near the top drag indicator down.
+    @MainActor
+    private func dismissBrowser(in app: XCUIApplication) {
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+        start.press(forDuration: 0.05, thenDragTo: end)
+        Thread.sleep(forTimeInterval: 0.8)
+        // Retry once if sheet still covers home.
+        if !app.staticTexts["appTitle"].waitForExistence(timeout: 2) {
+            start.press(forDuration: 0.05, thenDragTo: end)
+            Thread.sleep(forTimeInterval: 0.8)
+        }
     }
 }
 

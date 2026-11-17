@@ -52,10 +52,14 @@ struct HomeView: View {
             }
             .background(HomePalette.background.ignoresSafeArea())
             .navigationBarHidden(true)
-            .fullScreenCover(item: $selectedSite) { site in
+            .sheet(item: $selectedSite) { site in
                 SiteBrowserView(site: site) {
                     selectedSite = nil
                 }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationContentInteraction(.scrolls)
+                .interactiveDismissDisabled(false)
             }
             .sheet(item: $settingsSite) { site in
                 SiteSettingsPlaceholderSheet(site: site) {
