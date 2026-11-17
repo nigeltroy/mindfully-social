@@ -29,8 +29,8 @@ final class MindfullySocialUITests: XCTestCase {
 
         reddit.tap()
         waitForBrowser(in: app, timeout: 25)
-        // reddit.com needs ~10s+ past dark/white splash under Tart load.
-        Thread.sleep(forTimeInterval: 16)
+        // reddit.com often needs 20s+ past dark/white splash under Tart load.
+        Thread.sleep(forTimeInterval: 22)
         let openShot = app.screenshot()
         let openAtt = XCTAttachment(screenshot: openShot)
         openAtt.name = "reddit-open-content"
@@ -38,9 +38,17 @@ final class MindfullySocialUITests: XCTestCase {
         add(openAtt)
 
         dismissBrowser(in: app)
+        // Extra swipe if sheet tip/webview still up.
+        if app.staticTexts["browserSwipeTip"].exists || app.otherElements["browserWebView"].exists {
+            dismissBrowser(in: app)
+        }
         XCTAssertTrue(title.waitForExistence(timeout: 15), "swipe dismiss did not return home")
+        XCTAssertFalse(
+            app.otherElements["browserWebView"].waitForExistence(timeout: 1),
+            "browser sheet still present after dismiss"
+        )
         // Hold home on-screen so continuous Tart video clearly shows dismiss → list.
-        Thread.sleep(forTimeInterval: 4)
+        Thread.sleep(forTimeInterval: 8)
         let afterShot = app.screenshot()
         let afterAtt = XCTAttachment(screenshot: afterShot)
         afterAtt.name = "reddit-after-dismiss"
