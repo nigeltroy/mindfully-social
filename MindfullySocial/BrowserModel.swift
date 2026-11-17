@@ -57,8 +57,8 @@ final class BrowserModel: ObservableObject {
     }
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
-    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-22 Explore blank (search kept)
-    /// + MSA-21 app-promo / use-the-app interstitial hide.
+    /// Injects MSA-16 Reels-nav, MSA-18 feed-ad hide, MSA-19/22 Explore scripts,
+    /// MSA-21 app-promo hide, and MSA-23 Stories sponsored-ad auto-skip.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -69,7 +69,8 @@ final class BrowserModel: ObservableObject {
             InstagramChromeTweaks.userScriptSource,
             InstagramChromeTweaks.feedHideUserScriptSource,
             InstagramSearchReelsHide.searchReelsHideUserScriptSource,
-            InstagramAppPromoHide.userScriptSource
+            InstagramAppPromoHide.userScriptSource,
+            InstagramStoryAdSkip.userScriptSource
         ]
         for source in sources {
             let script = WKUserScript(
@@ -302,6 +303,47 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-app-promo-dump.json")
             try? payload.write(to: url, atomically: true, encoding: .utf8)
             NSLog("AppPromoDump: wrote %d bytes", payload.utf8.count)
+        }
+    }
+
+    /// `-DumpIGStories` → Documents/msa-story-ad-skip-dump-*.json while browsing Stories.
+    /// `-DisableStoryAdSkip` → leave sponsored stories alone for before shots.
+    func startStoryAdSkipProbeIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGStories") || args.contains("-DisableStoryAdSkip") else { return }
+        applyStoryAdSkipLaunchFlagsIfNeeded()
+        guard args.contains("-DumpIGStories") else { return }
+        for delay in [4.0, 8.0, 12.0, 18.0, 26.0, 36.0, 48.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.applyStoryAdSkipLaunchFlagsIfNeeded()
+                self?.writeStoryAdSkipDump(suffix: String(Int(delay)))
+            }
+        }
+    }
+
+    private func applyStoryAdSkipLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableStoryAdSkip") else { return }
+        let js = #"(function(){try{if(window.__msaStoryAdSkip&&window.__msaStoryAdSkip.setEnabled){window.__msaStoryAdSkip.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func writeStoryAdSkipDump(suffix: String) {
+        webView.evaluateJavaScript(InstagramStoryAdSkip.dumpScript) { result, error in
+            let body: String
+            if let error {
+                body = "{\"error\":\"evaluate\",\"detail\":\"\(error.localizedDescription)\"}\n"
+            } else if let text = result as? String {
+                body = text + "\n"
+            } else {
+                body = "{\"error\":\"non_string_result\"}\n"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-story-ad-skip-dump-\(suffix).json")
+            try? body.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("MSA StoryAdSkipDump: wrote %@", url.lastPathComponent)
         }
     }
 }

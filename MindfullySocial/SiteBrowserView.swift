@@ -51,6 +51,7 @@ struct SiteBrowserView: View {
             model.installSiteTweaks(for: site.id)
             model.startFeedHideProbeIfRequested()
             model.startAppPromoProbeIfRequested()
+            model.startStoryAdSkipProbeIfRequested()
             UsageTimeStore.beginSession(for: site.id)
             model.load(url: resolveLaunchURL(for: site))
             model.startExploreDumpIfRequested()

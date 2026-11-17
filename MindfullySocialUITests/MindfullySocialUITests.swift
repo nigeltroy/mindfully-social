@@ -515,16 +515,119 @@ final class MindfullySocialUITests: XCTestCase {
             return (u, p)
         }
         // Tart guest fallback used when xcodebuild does not forward env into the test runner.
-        let userURL = URL(fileURLWithPath: "/tmp/msa19-ig-user.txt")
-        let passURL = URL(fileURLWithPath: "/tmp/msa19-ig-pass.txt")
-        guard
-            let u = try? String(contentsOf: userURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-            let p = try? String(contentsOf: passURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
-            !u.isEmpty, !p.isEmpty
-        else {
-            return nil
+        let candidates: [(URL, URL)] = [
+            (URL(fileURLWithPath: "/tmp/msa23-ig-user.txt"), URL(fileURLWithPath: "/tmp/msa23-ig-pass.txt")),
+            (URL(fileURLWithPath: "/tmp/msa19-ig-user.txt"), URL(fileURLWithPath: "/tmp/msa19-ig-pass.txt"))
+        ]
+        for (userURL, passURL) in candidates {
+            if
+                let u = try? String(contentsOf: userURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+                let p = try? String(contentsOf: passURL, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+                !u.isEmpty, !p.isEmpty
+            {
+                return (u, p)
+            }
         }
-        return (u, p)
+        return nil
+    }
+
+    /// Browse Instagram Stories: open tray, advance through items, capture proof.
+    /// Relies on persisted WK session; falls back to env/file login if needed.
+    /// Launch flags: `-DumpIGStories` writes Documents dumps; skip runs enabled by default.
+    @MainActor
+    func testInstagramStoryAdSkip() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGStories"]
+        app.launch()
+
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 8)
+        dismissIGAlerts(in: app)
+
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = name
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+
+        // Login if a fresh simulator lost the WK session.
+        if let creds = instagramCredentials() {
+            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+            let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
+            if loginLink.waitForExistence(timeout: 3), loginLink.isHittable {
+                let web = app.webViews.firstMatch
+                _ = web.waitForExistence(timeout: 5)
+                loginLink.tap()
+                Thread.sleep(forTimeInterval: 3)
+                dismissIGAlerts(in: app)
+                let userField = web.textFields.firstMatch
+                if userField.waitForExistence(timeout: 8) {
+                    userField.tap()
+                    userField.typeText(creds.username)
+                    let passField = web.secureTextFields.firstMatch
+                    if passField.waitForExistence(timeout: 5) {
+                        passField.tap()
+                        passField.typeText(creds.password)
+                    }
+                    let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
+                    if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
+                        loginBtn.tap()
+                    } else {
+                        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
+                    }
+                    Thread.sleep(forTimeInterval: 14)
+                    dismissIGAlerts(in: app)
+                }
+            }
+        }
+
+        attach("stories-home")
+
+        // Open first story ring in the tray (upper-left band under status).
+        // Prefer labeled Story buttons; fall back to coordinate taps across the tray.
+        var opened = false
+        let storyPred = NSPredicate(format: "label CONTAINS[c] %@", "Story")
+        let storyBtn = app.descendants(matching: .any).matching(storyPred).firstMatch
+        if storyBtn.waitForExistence(timeout: 4), storyBtn.isHittable {
+            storyBtn.tap()
+            opened = true
+        }
+        if !opened {
+            // Stories tray sits near the top; try a few avatar slots left→right.
+            let xs: [CGFloat] = [0.12, 0.24, 0.36, 0.48]
+            for x in xs {
+                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.16)).tap()
+                Thread.sleep(forTimeInterval: 2.2)
+                dismissIGAlerts(in: app)
+                // Heuristic: story viewer usually fills the screen; tip is already gone.
+                attach(String(format: "stories-tap-x%.0f", x * 100))
+                // If URL dump later shows /stories/, great; keep advancing either way.
+                opened = true
+                break
+            }
+        }
+
+        Thread.sleep(forTimeInterval: 2.5)
+        attach("stories-opened")
+
+        // Advance through several story items so a sponsored ad (if present) is hit.
+        // Auto-skip should fire without taps when an ad is detected; we still nudge
+        // forward occasionally to reach ads between organic stories.
+        for i in 1...14 {
+            // Right-side tap advances organic stories; ads should already be skipped by JS.
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.48)).tap()
+            Thread.sleep(forTimeInterval: 1.35)
+            dismissIGAlerts(in: app)
+            if i == 2 || i == 5 || i == 8 || i == 11 || i == 14 {
+                attach("stories-advance-\(i)")
+            }
+        }
+
+        Thread.sleep(forTimeInterval: 4)
+        attach("stories-final")
+        // Allow dump timers (up to ~48s from launch) — we are already past most.
+        Thread.sleep(forTimeInterval: 8)
     }
 
     /// Fresh-simulator Instagram login only (for iPhone 17e / isolated sims).
