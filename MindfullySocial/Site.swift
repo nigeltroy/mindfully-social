@@ -25,5 +25,11 @@ struct Site: Identifiable, Hashable {
             iconAssetName: "FacebookIcon",
             url: URL(string: "https://www.facebook.com")!
         ),
+        Site(
+            id: "reddit",
+            name: "Reddit",
+            iconAssetName: "RedditIcon",
+            url: URL(string: "https://www.reddit.com")!
+        ),
     ]
 }

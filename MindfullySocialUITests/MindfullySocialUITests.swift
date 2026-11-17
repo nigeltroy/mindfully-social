@@ -16,16 +16,20 @@ final class MindfullySocialUITests: XCTestCase {
         let instagram = app.buttons["site-instagram"]
         let youtube = app.buttons["site-youtube"]
         let facebook = app.buttons["site-facebook"]
+        let reddit = app.buttons["site-reddit"]
         XCTAssertTrue(instagram.waitForExistence(timeout: 5))
         XCTAssertTrue(youtube.exists)
         XCTAssertTrue(facebook.exists)
+        XCTAssertTrue(reddit.exists)
 
         XCTAssertTrue(app.staticTexts["usage-instagram"].exists)
         XCTAssertTrue(app.staticTexts["usage-youtube"].exists)
         XCTAssertTrue(app.staticTexts["usage-facebook"].exists)
+        XCTAssertTrue(app.staticTexts["usage-reddit"].exists)
         XCTAssertTrue(app.buttons["settings-instagram"].exists)
         XCTAssertTrue(app.buttons["settings-youtube"].exists)
         XCTAssertTrue(app.buttons["settings-facebook"].exists)
+        XCTAssertTrue(app.buttons["settings-reddit"].exists)
 
         let homeShot = app.screenshot()
         let homeAttachment = XCTAttachment(screenshot: homeShot)
@@ -66,6 +70,18 @@ final class MindfullySocialUITests: XCTestCase {
         fbAttachment.name = "facebook-open"
         fbAttachment.lifetime = .keepAlways
         add(fbAttachment)
+
+        dismissBrowser(in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+
+        reddit.tap()
+        waitForBrowser(in: app, timeout: 15)
+        Thread.sleep(forTimeInterval: 4)
+        let rdShot = app.screenshot()
+        let rdAttachment = XCTAttachment(screenshot: rdShot)
+        rdAttachment.name = "reddit-open"
+        rdAttachment.lifetime = .keepAlways
+        add(rdAttachment)
 
         dismissBrowser(in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))

@@ -69,7 +69,7 @@ struct HomeView: View {
         }
         .preferredColorScheme(.dark)
         .onAppear {
-            // Proof / automation: -OpenSite instagram|youtube|facebook
+            // Proof / automation: -OpenSite instagram|youtube|facebook|reddit
             let args = ProcessInfo.processInfo.arguments
             if let idx = args.firstIndex(of: "-OpenSite"), args.index(after: idx) < args.endIndex {
                 let raw = args[args.index(after: idx)].lowercased()
