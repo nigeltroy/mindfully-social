@@ -13,6 +13,15 @@ struct SiteBrowserView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("browserWebView")
 
+            // Invisible top strip: sites like Reddit capture scroll so the system
+            // grabber alone is unreliable — swipe-down here calls onClose.
+            Color.clear
+                .frame(height: 36)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .highPriorityGesture(dismissDrag)
+                .accessibilityIdentifier("browserDismissStrip")
+
             if showSwipeTip {
                 Text("Swipe down to leave")
                     .font(.footnote.weight(.medium))
@@ -50,6 +59,15 @@ struct SiteBrowserView: View {
         .onDisappear {
             UsageTimeStore.endSession(for: site.id)
         }
+    }
+
+    private var dismissDrag: some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .local)
+            .onEnded { value in
+                if value.translation.height > 70, abs(value.translation.width) < 120 {
+                    onClose()
+                }
+            }
     }
 
     private func scheduleSwipeTipHide() {

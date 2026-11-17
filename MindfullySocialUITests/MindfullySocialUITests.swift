@@ -714,29 +714,25 @@ final class MindfullySocialUITests: XCTestCase {
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
     }
 
-    /// Sheet-style dismiss: drag the system grabber downward.
-    /// Keep the drag above Reddit's "Get the App" web overlay (~bottom 40%).
+    /// Swipe-down dismiss via the top dismiss strip / sheet grabber band.
     @MainActor
     private func dismissBrowser(in app: XCUIApplication) {
-        let grabber = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
-        grabber.press(forDuration: 0.25, thenDragTo: end)
+        let strip = app.otherElements["browserDismissStrip"]
+        let start: XCUICoordinate
+        if strip.waitForExistence(timeout: 2) {
+            start = strip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        } else {
+            start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.045))
+        }
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        start.press(forDuration: 0.12, thenDragTo: end)
         Thread.sleep(forTimeInterval: 1.0)
         let homeRowHittable = app.buttons["site-instagram"].isHittable
             || app.buttons["site-reddit"].isHittable
             || app.buttons["site-facebook"].isHittable
-        if app.staticTexts["browserSwipeTip"].exists || !homeRowHittable {
-            // Second try: slightly lower start (tip band) still above web chrome.
-            let tip = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
-            tip.press(forDuration: 0.2, thenDragTo: end)
+        if !homeRowHittable {
+            start.press(forDuration: 0.15, thenDragTo: end)
             Thread.sleep(forTimeInterval: 1.0)
-        }
-        // Last resort for IG/YT paths that used the long fling.
-        if !app.staticTexts["appTitle"].exists {
-            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06))
-            let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
-            start.press(forDuration: 0.05, thenDragTo: bottom)
-            Thread.sleep(forTimeInterval: 0.8)
         }
     }
 }
