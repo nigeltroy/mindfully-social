@@ -21,7 +21,7 @@
 		A1000000000000000000000D /* InstagramSearchReelsHide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001D /* InstagramSearchReelsHide.swift */; };
 		A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* InstagramFeedHideTweaks.swift */; };
 		A1000000000000000000000F /* InstagramAppPromoHide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001F /* InstagramAppPromoHide.swift */; };
-		A10000000000000000000011 /* InstagramStoryAdSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000021 /* InstagramStoryAdSkip.swift */; };
+		A10000000000000000000034 /* InstagramStoryAdSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000035 /* InstagramStoryAdSkip.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,7 +51,7 @@
 		A1000000000000000000001D /* InstagramSearchReelsHide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramSearchReelsHide.swift; sourceTree = "<group>"; };
 		A1000000000000000000001E /* InstagramFeedHideTweaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramFeedHideTweaks.swift; sourceTree = "<group>"; };
 		A1000000000000000000001F /* InstagramAppPromoHide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramAppPromoHide.swift; sourceTree = "<group>"; };
-		A10000000000000000000021 /* InstagramStoryAdSkip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStoryAdSkip.swift; sourceTree = "<group>"; };
+		A10000000000000000000035 /* InstagramStoryAdSkip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStoryAdSkip.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,7 +95,7 @@
 				A1000000000000000000001D /* InstagramSearchReelsHide.swift */,
 				A1000000000000000000001E /* InstagramFeedHideTweaks.swift */,
 				A1000000000000000000001F /* InstagramAppPromoHide.swift */,
-				A10000000000000000000021 /* InstagramStoryAdSkip.swift */,
+				A10000000000000000000035 /* InstagramStoryAdSkip.swift */,
 				A1000000000000000000001A /* PersistProbe.swift */,
 				A10000000000000000000019 /* Assets.xcassets */,
 			);
@@ -229,7 +229,7 @@
 				A1000000000000000000000D /* InstagramSearchReelsHide.swift in Sources */,
 				A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */,
 				A1000000000000000000000F /* InstagramAppPromoHide.swift in Sources */,
-				A10000000000000000000011 /* InstagramStoryAdSkip.swift in Sources */,
+				A10000000000000000000034 /* InstagramStoryAdSkip.swift in Sources */,
 				A10000000000000000000009 /* PersistProbe.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

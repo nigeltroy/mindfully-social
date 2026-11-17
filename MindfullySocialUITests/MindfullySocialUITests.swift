@@ -617,17 +617,19 @@ final class MindfullySocialUITests: XCTestCase {
             opened = true
         }
         if !opened {
-            // Stories tray sits near the top; try a few avatar slots left→right.
-            let xs: [CGFloat] = [0.12, 0.24, 0.36, 0.48]
-            for x in xs {
-                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: 0.16)).tap()
-                Thread.sleep(forTimeInterval: 2.2)
+            // Stories tray sits under the IG wordmark (below swipe tip). Try several
+            // avatar slots + vertical bands — first ring is often "Your story".
+            let points: [(CGFloat, CGFloat)] = [
+                (0.28, 0.19), (0.40, 0.19), (0.52, 0.19),
+                (0.28, 0.22), (0.40, 0.22), (0.22, 0.20)
+            ]
+            for (x, y) in points {
+                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+                Thread.sleep(forTimeInterval: 2.4)
                 dismissIGAlerts(in: app)
-                // Heuristic: story viewer usually fills the screen; tip is already gone.
-                attach(String(format: "stories-tap-x%.0f", x * 100))
-                // If URL dump later shows /stories/, great; keep advancing either way.
+                attach(String(format: "stories-tap-x%.0f-y%.0f", x * 100, y * 100))
+                // Keep going through candidates; later dumps show /stories/ if any hit.
                 opened = true
-                break
             }
         }
 
