@@ -154,6 +154,32 @@ final class MindfullySocialUITests: XCTestCase {
         add(softReload)
     }
 
+
+    /// Short after-only proof: 3 scrolls, one screenshot. No before pass.
+    @MainActor
+    func testInstagramFeedHideAfterOnly() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-OpenSite", "instagram", "-DumpIGFeed"]
+        app.launch()
+        let close = app.buttons["browserCloseButton"]
+        XCTAssertTrue(close.waitForExistence(timeout: 25))
+        Thread.sleep(forTimeInterval: 12)
+        dismissIGAlerts(in: app)
+        let top = XCTAttachment(screenshot: app.screenshot())
+        top.name = "after-top"
+        top.lifetime = .keepAlways
+        add(top)
+        for _ in 0..<3 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.2)
+        }
+        Thread.sleep(forTimeInterval: 3)
+        let scroll = XCTAttachment(screenshot: app.screenshot())
+        scroll.name = "after-scroll"
+        scroll.lifetime = .keepAlways
+        add(scroll)
+    }
+
     @MainActor
     private func swipeFeedUp(in app: XCUIApplication) {
         let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.72))
