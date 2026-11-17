@@ -50,29 +50,18 @@ enum InstagramSearchReelsHide {
       '  margin: 0 !important;',
       '  padding: 0 !important;',
       '}',
-      /* Dense photo grid after Reels removal — override IG absolute/sparse grid holes. */
+      /* Dense 3-col packing after Reels removal (avoids black holes from sparse absolute grid). */
       '[data-msa-explore-reflow="1"] {',
-      '  display: flex !important;',
-      '  flex-direction: row !important;',
-      '  flex-wrap: wrap !important;',
-      '  align-content: flex-start !important;',
-      '  align-items: stretch !important;',
-      '  justify-content: flex-start !important;',
+      '  display: grid !important;',
+      '  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;',
+      '  grid-auto-flow: dense !important;',
+      '  grid-auto-rows: minmax(118px, auto) !important;',
       '  gap: 1px !important;',
       '  width: 100% !important;',
-      '  max-width: 100% !important;',
       '  box-sizing: border-box !important;',
-      '  grid-template-columns: none !important;',
-      '  grid-auto-flow: unset !important;',
       '  position: relative !important;',
       '  height: auto !important;',
-      '  min-height: 0 !important;',
-      '}',
-      '[data-msa-explore-reflow="1"] > [' + ATTR + '="1"] {',
-      '  display: none !important;',
-      '  flex: 0 0 0 !important;',
-      '  width: 0 !important;',
-      '  height: 0 !important;',
+      '  min-height: 40vh !important;',
       '}',
       '[data-msa-explore-tile="1"] {',
       '  position: relative !important;',
@@ -82,18 +71,19 @@ enum InstagramSearchReelsHide {
       '  bottom: auto !important;',
       '  transform: none !important;',
       '  inset: auto !important;',
-      '  flex: 0 0 calc((100% - 2px) / 3) !important;',
-      '  width: calc((100% - 2px) / 3) !important;',
-      '  max-width: calc((100% - 2px) / 3) !important;',
+      '  width: 100% !important;',
+      '  max-width: none !important;',
       '  min-width: 0 !important;',
       '  height: auto !important;',
-      '  aspect-ratio: 1 / 1.15 !important;',
+      '  min-height: 118px !important;',
+      '  aspect-ratio: 1 / 1.2 !important;',
       '  margin: 0 !important;',
       '  box-sizing: border-box !important;',
-      '  grid-column: unset !important;',
-      '  grid-row: unset !important;',
+      '  grid-column: auto !important;',
+      '  grid-row: auto !important;',
       '  overflow: hidden !important;',
       '}',
+      '[data-msa-explore-tile="1"] a,',
       '[data-msa-explore-tile="1"] img,',
       '[data-msa-explore-tile="1"] video {',
       '  width: 100% !important;',
@@ -239,14 +229,14 @@ enum InstagramSearchReelsHide {
     try {
       tile.style.setProperty('display', 'none', 'important');
       tile.style.setProperty('pointer-events', 'none', 'important');
-      tile.style.setProperty('position', 'absolute', 'important');
-      tile.style.setProperty('left', '-9999px', 'important');
+      tile.style.setProperty('width', '0', 'important');
+      tile.style.setProperty('height', '0', 'important');
+      tile.style.setProperty('margin', '0', 'important');
+      tile.style.setProperty('padding', '0', 'important');
+      tile.style.setProperty('overflow', 'hidden', 'important');
+      tile.style.setProperty('grid-column', 'unset', 'important');
+      tile.style.setProperty('grid-row', 'unset', 'important');
     } catch (e) {}
-    // Prefer DOM removal so sparse CSS grid / absolute slots collapse.
-    try {
-      if (tile.parentElement) tile.__msaExploreParent = tile.parentElement;
-      tile.remove();
-    } catch (e2) {}
   }
 
   function findExploreGridRoot() {
@@ -283,14 +273,20 @@ enum InstagramSearchReelsHide {
   function reflowExploreGrid() {
     var root = findExploreGridRoot();
     if (!root) return;
+    // Only reflow when we actually hid something in/near this root.
+    if (!root.querySelector('[' + ATTR + '="1"]') &&
+        document.querySelectorAll('[' + ATTR + '="1"]').length === 0) {
+      return;
+    }
     root.setAttribute('data-msa-explore-reflow', '1');
     try {
-      root.style.setProperty('display', 'flex', 'important');
-      root.style.setProperty('flex-wrap', 'wrap', 'important');
-      root.style.setProperty('align-content', 'flex-start', 'important');
+      root.style.setProperty('display', 'grid', 'important');
+      root.style.setProperty('grid-template-columns', 'repeat(3, minmax(0, 1fr))', 'important');
+      root.style.setProperty('grid-auto-flow', 'dense', 'important');
+      root.style.setProperty('grid-auto-rows', 'minmax(118px, auto)', 'important');
       root.style.setProperty('gap', '1px', 'important');
       root.style.setProperty('height', 'auto', 'important');
-      root.style.setProperty('grid-template-columns', 'none', 'important');
+      root.style.setProperty('min-height', '40vh', 'important');
     } catch (e) {}
 
     for (var i = 0; i < root.children.length; i++) {
@@ -298,23 +294,23 @@ enum InstagramSearchReelsHide {
       if (child.getAttribute && child.getAttribute(ATTR) === '1') continue;
       var hasMedia = child.querySelector && child.querySelector('a[href*="/p/"], a[href*="/reel/"], img, video');
       if (!hasMedia) continue;
-      // Skip search chrome / headers accidentally nested.
       var cr = child.getBoundingClientRect();
-      if (cr.height > 0 && cr.height < 48 && cr.width > window.innerWidth * 0.8) continue;
+      if (cr.height > 0 && cr.height < 40 && cr.width > window.innerWidth * 0.8) continue;
       child.setAttribute('data-msa-explore-tile', '1');
       try {
         child.style.setProperty('position', 'relative', 'important');
         child.style.setProperty('left', 'auto', 'important');
         child.style.setProperty('top', 'auto', 'important');
+        child.style.setProperty('right', 'auto', 'important');
+        child.style.setProperty('bottom', 'auto', 'important');
         child.style.setProperty('transform', 'none', 'important');
-        child.style.setProperty('flex', '0 0 calc((100% - 2px) / 3)', 'important');
-        child.style.setProperty('width', 'calc((100% - 2px) / 3)', 'important');
-        child.style.setProperty('max-width', 'calc((100% - 2px) / 3)', 'important');
-        child.style.setProperty('aspect-ratio', '1 / 1.15', 'important');
+        child.style.setProperty('width', '100%', 'important');
         child.style.setProperty('height', 'auto', 'important');
+        child.style.setProperty('min-height', '118px', 'important');
+        child.style.setProperty('aspect-ratio', '1 / 1.2', 'important');
         child.style.setProperty('margin', '0', 'important');
-        child.style.setProperty('grid-column', 'unset', 'important');
-        child.style.setProperty('grid-row', 'unset', 'important');
+        child.style.setProperty('grid-column', 'auto', 'important');
+        child.style.setProperty('grid-row', 'auto', 'important');
         child.style.setProperty('overflow', 'hidden', 'important');
       } catch (e2) {}
     }
