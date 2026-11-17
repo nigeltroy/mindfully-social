@@ -15,13 +15,17 @@ final class MindfullySocialUITests: XCTestCase {
 
         let instagram = app.buttons["site-instagram"]
         let youtube = app.buttons["site-youtube"]
+        let facebook = app.buttons["site-facebook"]
         XCTAssertTrue(instagram.waitForExistence(timeout: 5))
         XCTAssertTrue(youtube.exists)
+        XCTAssertTrue(facebook.exists)
 
         XCTAssertTrue(app.staticTexts["usage-instagram"].exists)
         XCTAssertTrue(app.staticTexts["usage-youtube"].exists)
+        XCTAssertTrue(app.staticTexts["usage-facebook"].exists)
         XCTAssertTrue(app.buttons["settings-instagram"].exists)
         XCTAssertTrue(app.buttons["settings-youtube"].exists)
+        XCTAssertTrue(app.buttons["settings-facebook"].exists)
 
         let homeShot = app.screenshot()
         let homeAttachment = XCTAttachment(screenshot: homeShot)
@@ -53,6 +57,55 @@ final class MindfullySocialUITests: XCTestCase {
 
         dismissBrowser(in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 10))
+
+        facebook.tap()
+        waitForBrowser(in: app, timeout: 15)
+        Thread.sleep(forTimeInterval: 4)
+        let fbShot = app.screenshot()
+        let fbAttachment = XCTAttachment(screenshot: fbShot)
+        fbAttachment.name = "facebook-open"
+        fbAttachment.lifetime = .keepAlways
+        add(fbAttachment)
+
+        dismissBrowser(in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+    }
+
+    /// MSA-26: Facebook home row + zero-chrome sheet open.
+    @MainActor
+    func testHomeListOpensFacebook() throws {
+        let app = XCUIApplication()
+        app.launch()
+
+        let title = app.staticTexts["appTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+
+        let facebook = app.buttons["site-facebook"]
+        XCTAssertTrue(facebook.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["usage-facebook"].exists)
+        XCTAssertTrue(app.buttons["settings-facebook"].exists)
+
+        let homeShot = XCTAttachment(screenshot: app.screenshot())
+        homeShot.name = "home-with-facebook"
+        homeShot.lifetime = .keepAlways
+        add(homeShot)
+
+        facebook.tap()
+        waitForBrowser(in: app, timeout: 15)
+        Thread.sleep(forTimeInterval: 5)
+
+        let openShot = XCTAttachment(screenshot: app.screenshot())
+        openShot.name = "facebook-open"
+        openShot.lifetime = .keepAlways
+        add(openShot)
+
+        dismissBrowser(in: app)
+        XCTAssertTrue(title.waitForExistence(timeout: 10))
+
+        let afterShot = XCTAttachment(screenshot: app.screenshot())
+        afterShot.name = "home-after-facebook"
+        afterShot.lifetime = .keepAlways
+        add(afterShot)
     }
 
     /// Scroll Instagram home feed, capture before/after style proof via launch flags.
