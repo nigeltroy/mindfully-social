@@ -271,16 +271,36 @@ enum InstagramStoryAdSkip {
       this.enabled = !!on;
     },
     // Tart-only helper: plant a Sponsored label in the story chrome to exercise skip.
-    simulateSponsored: function () {
+    // delaySkipMs lets XCUITest screenshot the Sponsored chrome before auto-advance.
+    simulateSponsored: function (delaySkipMs) {
       try {
         if (!inStoryViewer()) return 'not-in-story';
         var root = storyRoot();
         var host = (root && root.querySelector('header')) || root || document.body;
-        var el = document.createElement('span');
-        el.setAttribute('data-msa-sim-sponsored', '1');
-        el.textContent = 'Sponsored';
-        el.style.cssText = 'display:inline-block;font-size:12px;color:#fff;margin-left:6px;';
-        host.appendChild(el);
+        var existing = host.querySelector('[data-msa-sim-sponsored="1"]');
+        if (!existing) {
+          var el = document.createElement('div');
+          el.setAttribute('data-msa-sim-sponsored', '1');
+          el.textContent = 'Sponsored';
+          el.style.cssText = [
+            'position:fixed',
+            'top:72px',
+            'left:12px',
+            'z-index:2147483647',
+            'padding:6px 10px',
+            'background:rgba(0,0,0,0.72)',
+            'color:#fff',
+            'font:600 15px -apple-system,sans-serif',
+            'border-radius:8px',
+            'pointer-events:none'
+          ].join(';');
+          (document.body || host).appendChild(el);
+        }
+        var delay = typeof delaySkipMs === 'number' ? delaySkipMs : 0;
+        if (delay > 0) {
+          setTimeout(function () { maybeSkip(); }, delay);
+          return 'planted-delayed';
+        }
         maybeSkip();
         return 'planted';
       } catch (e) {
@@ -316,7 +336,7 @@ enum InstagramStoryAdSkip {
         hits: hits.slice(0, 8).map(function (h) { return { kind: h.kind, text: h.text }; }),
         interestingLabels: labels,
         stats: this.stats,
-        scriptCanary: 'storyadskip-v3'
+        scriptCanary: 'storyadskip-v4'
       };
     }
   };

@@ -654,6 +654,14 @@ final class MindfullySocialUITests: XCTestCase {
         }
         attach("stories-opened")
 
+        // Hold still so -SimulateStoryAd dump can plant a visible Sponsored chip,
+        // then auto-advance without any tap (pixel proof for findings gate).
+        Thread.sleep(forTimeInterval: 6.0)
+        attach("stories-sponsored-visible")
+        // No taps — wait for delayed maybeSkip after plant.
+        Thread.sleep(forTimeInterval: 4.0)
+        attach("stories-after-autoskip")
+
         // Advance through many items / users so a between-user Sponsored story can appear.
         // Auto-skip fires without taps when an ad is detected; we still nudge forward.
         for i in 1...36 {

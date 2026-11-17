@@ -329,10 +329,11 @@ final class BrowserModel: ObservableObject {
     }
 
     /// `-SimulateStoryAd` → plant a Sponsored label inside the story viewer (Tart mechanism proof).
+    /// Uses a short delay so XCUITest can screenshot Sponsored before auto-advance.
     private func maybeSimulateStoryAdIfRequested() {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-SimulateStoryAd") else { return }
-        let js = #"(function(){try{if(window.__msaStoryAdSkip&&window.__msaStoryAdSkip.simulateSponsored){return window.__msaStoryAdSkip.simulateSponsored();}return 'missing';}catch(e){return String(e);}})()"#
+        let js = #"(function(){try{if(window.__msaStoryAdSkip&&window.__msaStoryAdSkip.simulateSponsored){return window.__msaStoryAdSkip.simulateSponsored(2500);}return 'missing';}catch(e){return String(e);}})()"#
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
