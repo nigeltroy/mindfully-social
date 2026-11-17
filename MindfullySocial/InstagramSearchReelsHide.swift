@@ -115,35 +115,68 @@ enum InstagramSearchReelsHide {
     return false;
   }
 
+  function hasCarouselOnlyBadge(root) {
+    if (!root) return false;
+    var blob = textBlob(root);
+    var labeled = root.querySelectorAll('[aria-label], [alt], title, svg, img');
+    var parts = [blob];
+    for (var i = 0; i < labeled.length; i++) parts.push(textBlob(labeled[i]));
+    var all = parts.join(' ');
+    var isCarousel = /\bcarousel\b|\balbum\b|\bmultiple\b/.test(all);
+    var isReel = /\breels?\b|\bclips?\b|\bclapper/.test(all);
+    return isCarousel && !isReel;
+  }
+
+  function countMediaLinks(el) {
+    if (!el || !el.querySelectorAll) return 0;
+    return el.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').length;
+  }
+
+  // Prefer the smallest single-post cell — never a multi-tile row/grid parent.
   function findTileFrom(el) {
     var node = el;
     var best = null;
     var depth = 0;
-    while (node && node !== document.body && depth < 12) {
+    while (node && node !== document.body && depth < 10) {
       if (node.getAttribute && node.getAttribute(ATTR) === '1') return node;
       var tag = (node.tagName || '').toLowerCase();
-      if (tag === 'article') return node;
+      if (tag === 'article' && countMediaLinks(node) <= 1) return node;
       try {
         var r = node.getBoundingClientRect();
-        if (r.width >= 72 && r.height >= 72 && r.width < window.innerWidth * 0.55) {
+        var links = countMediaLinks(node);
+        if (
+          links <= 1 &&
+          r.width >= 72 &&
+          r.height >= 72 &&
+          r.width < window.innerWidth * 0.55
+        ) {
           var ratio = r.width / Math.max(r.height, 1);
-          if (ratio > 0.55 && ratio < 1.85) best = node;
+          if (ratio > 0.45 && ratio < 1.95) best = node;
         }
       } catch (e) {}
       var parent = node.parentElement;
-      if (parent && parent.children && parent.children.length >= 3) {
-        var siblings = parent.children;
+      if (parent && parent.children && parent.children.length >= 2) {
         var mediaKids = 0;
-        for (var i = 0; i < Math.min(siblings.length, 12); i++) {
-          var sr = siblings[i].getBoundingClientRect();
+        for (var i = 0; i < Math.min(parent.children.length, 12); i++) {
+          var sr = parent.children[i].getBoundingClientRect();
           if (sr.width >= 72 && sr.height >= 72) mediaKids++;
         }
-        if (mediaKids >= 3) return node;
+        // Stop at the cell (current node) when siblings look like a grid.
+        if (mediaKids >= 2 && countMediaLinks(node) <= 1) return node;
       }
       node = parent;
       depth++;
     }
     return best || el;
+  }
+
+  function shouldHideTile(tile, reelHref) {
+    if (!tile) return false;
+    if (reelHref) return true;
+    if (hasClapperOrReelBadge(tile)) return true;
+    // Do not hide pure carousel/photo cells.
+    if (hasCarouselOnlyBadge(tile)) return false;
+    return false;
   }
 
   function hideTile(tile) {
@@ -212,11 +245,12 @@ enum InstagramSearchReelsHide {
         var a = anchors[i];
         var p = pathOf(a);
         var reelHref = isReelPath(p);
-        var reelBadge = !reelHref && hasClapperOrReelBadge(a);
-        if (!reelHref && !reelBadge) continue;
         if (p === '/reels' || p === '/reels/') continue;
+        // Candidate: reel href on the anchor, or any /p/ cell that may carry a Reel badge overlay.
+        if (!reelHref && p.indexOf('/p/') !== 0) continue;
 
         var tile = findTileFrom(a);
+        if (!shouldHideTile(tile, reelHref)) continue;
         try {
           var tr = tile.getBoundingClientRect();
           if (tr.width > window.innerWidth * 0.7 && tr.height > window.innerHeight * 0.5) {
@@ -226,15 +260,17 @@ enum InstagramSearchReelsHide {
         hideTile(tile);
       }
 
+      // Second pass: walk visible cells; hide when the cell (not just the <a>) has a Reel badge.
       var media = document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]');
       for (var j = 0; j < media.length; j++) {
         var m = media[j];
         if (m.getAttribute && m.getAttribute(ATTR) === '1') continue;
-        if (!hasClapperOrReelBadge(m)) continue;
-        var innerReel = m.querySelector && m.querySelector('a[href*="/reel/"]');
-        var labelHit = /\breels?\b|\bclips?\b/.test(textBlob(m));
-        if (!innerReel && !labelHit) continue;
-        hideTile(findTileFrom(innerReel || m));
+        var tile2 = findTileFrom(m);
+        if (tile2.getAttribute && tile2.getAttribute(ATTR) === '1') continue;
+        if (hasCarouselOnlyBadge(tile2)) continue;
+        var innerReel = tile2.querySelector && tile2.querySelector('a[href*="/reel/"]');
+        if (!shouldHideTile(tile2, !!innerReel)) continue;
+        hideTile(tile2);
       }
 
       try {
