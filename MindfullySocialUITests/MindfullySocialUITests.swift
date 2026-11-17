@@ -607,59 +607,29 @@ final class MindfullySocialUITests: XCTestCase {
 
         attach("stories-home")
 
-        // Open a *followed* story ring — never "Your story" (that opens the file picker).
-        func dismissFilePickerIfPresent() {
-            let cancel = app.buttons["Cancel"]
-            if cancel.waitForExistence(timeout: 1), cancel.isHittable {
-                cancel.tap()
-                Thread.sleep(forTimeInterval: 0.6)
-                return
-            }
-            // Tap outside the Photo Library / Choose File popover.
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
-            Thread.sleep(forTimeInterval: 0.5)
-        }
+        // Deep-link into Stories via path (tray taps often hit feed video players instead).
+        app.terminate()
+        Thread.sleep(forTimeInterval: 1.2)
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/stories/theonion/",
+            "-DumpIGStories"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 8)
+        dismissIGAlerts(in: app)
+        attach("stories-deeplink-theonion")
 
-        var opened = false
-        // Prefer a11y labels that include both account + "Story" (not feed posts).
-        let ringPred = NSPredicate(
-            format: "label CONTAINS[c] %@ AND NOT label CONTAINS[c] %@",
-            "Story",
-            "Your story"
-        )
-        let rings = app.descendants(matching: .any).matching(ringPred)
-        for idx in 0..<min(rings.count, 6) {
-            let btn = rings.element(boundBy: idx)
-            guard btn.waitForExistence(timeout: 1), btn.isHittable else { continue }
-            let label = (btn.label as String?) ?? ""
-            if label.localizedCaseInsensitiveContains("Plus icon") { continue }
-            btn.tap()
-            Thread.sleep(forTimeInterval: 2.8)
+        // If deeplink bounced to login/home, fall back to tray coordinates (skip Your story).
+        let points: [(CGFloat, CGFloat)] = [
+            (0.30, 0.175), (0.42, 0.175), (0.54, 0.175)
+        ]
+        for (x, y) in points {
+            app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+            Thread.sleep(forTimeInterval: 2.0)
             dismissIGAlerts(in: app)
-            dismissFilePickerIfPresent()
-            attach("stories-open-ring-\(idx)")
-            opened = true
-            break
         }
-        if !opened {
-            // Coordinate tray rings: skip leftmost "Your story"; hit 2nd/3rd/4th.
-            let points: [(CGFloat, CGFloat)] = [
-                (0.30, 0.175), (0.42, 0.175), (0.54, 0.175),
-                (0.30, 0.20), (0.42, 0.20)
-            ]
-            for (x, y) in points {
-                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
-                Thread.sleep(forTimeInterval: 2.6)
-                dismissIGAlerts(in: app)
-                dismissFilePickerIfPresent()
-                attach(String(format: "stories-tap-x%.0f-y%.0f", x * 100, y * 100))
-                opened = true
-                // Stop after first coordinate attempt batch item — still try a couple.
-                if y >= 0.20 { break }
-            }
-        }
-
-        Thread.sleep(forTimeInterval: 2.5)
         attach("stories-opened")
 
         // Advance through several story items so a sponsored ad (if present) is hit.
