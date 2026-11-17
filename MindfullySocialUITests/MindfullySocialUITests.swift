@@ -607,39 +607,48 @@ final class MindfullySocialUITests: XCTestCase {
 
         attach("stories-home")
 
-        // Deep-link into Stories via path (tray taps often hit feed video players instead).
-        app.terminate()
-        Thread.sleep(forTimeInterval: 1.2)
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/stories/theonion/",
-            "-DumpIGStories"
-        ]
-        app.launch()
-        waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 8)
-        dismissIGAlerts(in: app)
-        attach("stories-deeplink-theonion")
-
-        // IG web often gates with "View as <user>?" — must confirm to play.
-        let viewStoryPred = NSPredicate(format: "label ==[c] %@", "View story")
-        let viewStory = app.descendants(matching: .any).matching(viewStoryPred).firstMatch
-        if viewStory.waitForExistence(timeout: 6) {
-            if viewStory.isHittable {
-                viewStory.tap()
-            } else {
-                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.58)).tap()
-            }
-            Thread.sleep(forTimeInterval: 2.5)
-            dismissIGAlerts(in: app)
-            attach("stories-view-confirmed")
-        } else {
-            // Fallback tray rings if deeplink bounced home.
-            for (x, y) in [(0.30, 0.175), (0.42, 0.175), (0.54, 0.175)] as [(CGFloat, CGFloat)] {
-                app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
-                Thread.sleep(forTimeInterval: 1.8)
+        func confirmViewStoryIfNeeded(shot: String) {
+            let viewStoryPred = NSPredicate(format: "label ==[c] %@", "View story")
+            let viewStory = app.descendants(matching: .any).matching(viewStoryPred).firstMatch
+            if viewStory.waitForExistence(timeout: 4) {
+                if viewStory.isHittable {
+                    viewStory.tap()
+                } else {
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.58)).tap()
+                }
+                Thread.sleep(forTimeInterval: 2.2)
                 dismissIGAlerts(in: app)
+                attach(shot)
             }
+        }
+
+        // Prefer the home tray sequence (ads appear between accounts). Deeplink is backup.
+        // Skip leftmost "Your story"; tap 2nd/3rd rings.
+        var opened = false
+        for (x, y) in [(0.30, 0.175), (0.42, 0.175), (0.54, 0.175)] as [(CGFloat, CGFloat)] {
+            app.coordinate(withNormalizedOffset: CGVector(dx: x, dy: y)).tap()
+            Thread.sleep(forTimeInterval: 2.2)
+            dismissIGAlerts(in: app)
+            confirmViewStoryIfNeeded(shot: "stories-view-confirmed")
+            attach(String(format: "stories-tray-x%.0f", x * 100))
+            opened = true
+            break
+        }
+
+        if !opened {
+            app.terminate()
+            Thread.sleep(forTimeInterval: 1.0)
+            app.launchArguments = [
+                "-OpenSite", "instagram",
+                "-OpenPath", "/stories/theonion/",
+                "-DumpIGStories"
+            ]
+            app.launch()
+            waitForBrowser(in: app, timeout: 25)
+            Thread.sleep(forTimeInterval: 8)
+            dismissIGAlerts(in: app)
+            attach("stories-deeplink-theonion")
+            confirmViewStoryIfNeeded(shot: "stories-view-confirmed")
         }
         attach("stories-opened")
 
