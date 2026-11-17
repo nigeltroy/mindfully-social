@@ -39,12 +39,14 @@ final class MindfullySocialUITests: XCTestCase {
 
         dismissBrowser(in: app)
         XCTAssertTrue(title.waitForExistence(timeout: 15), "swipe dismiss did not return home")
-        Thread.sleep(forTimeInterval: 1.5)
+        // Hold home on-screen so continuous Tart video clearly shows dismiss → list.
+        Thread.sleep(forTimeInterval: 4)
         let afterShot = app.screenshot()
         let afterAtt = XCTAttachment(screenshot: afterShot)
         afterAtt.name = "reddit-after-dismiss"
         afterAtt.lifetime = .keepAlways
         add(afterAtt)
+        Thread.sleep(forTimeInterval: 2)
     }
 
     @MainActor
