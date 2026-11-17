@@ -714,21 +714,29 @@ final class MindfullySocialUITests: XCTestCase {
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
     }
 
-    /// Sheet-style dismiss: slow drag from grabber / tip through to bottom.
+    /// Sheet-style dismiss: drag the system grabber downward.
+    /// Keep the drag above Reddit's "Get the App" web overlay (~bottom 40%).
     @MainActor
     private func dismissBrowser(in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04))
-        let mid = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
-        start.press(forDuration: 0.15, thenDragTo: mid)
-        Thread.sleep(forTimeInterval: 0.15)
-        mid.press(forDuration: 0.05, thenDragTo: end)
-        Thread.sleep(forTimeInterval: 0.9)
-        // Fallback full-length fling if sheet tip still up.
-        if app.staticTexts["browserSwipeTip"].exists || !app.buttons["site-reddit"].isHittable {
-            let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
-            top.press(forDuration: 0.2, thenDragTo: end)
-            Thread.sleep(forTimeInterval: 0.9)
+        let grabber = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.02))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.42))
+        grabber.press(forDuration: 0.25, thenDragTo: end)
+        Thread.sleep(forTimeInterval: 1.0)
+        let homeRowHittable = app.buttons["site-instagram"].isHittable
+            || app.buttons["site-reddit"].isHittable
+            || app.buttons["site-facebook"].isHittable
+        if app.staticTexts["browserSwipeTip"].exists || !homeRowHittable {
+            // Second try: slightly lower start (tip band) still above web chrome.
+            let tip = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.05))
+            tip.press(forDuration: 0.2, thenDragTo: end)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        // Last resort for IG/YT paths that used the long fling.
+        if !app.staticTexts["appTitle"].exists {
+            let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06))
+            let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
+            start.press(forDuration: 0.05, thenDragTo: bottom)
+            Thread.sleep(forTimeInterval: 0.8)
         }
     }
 }

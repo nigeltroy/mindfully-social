@@ -58,7 +58,10 @@ struct HomeView: View {
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
-                .presentationContentInteraction(.scrolls)
+                // `.automatic` lets the system grabber dismiss even when the site
+                // webview (e.g. Reddit "Get the App" overlay) aggressively captures scrolls.
+                // Feed scrolling still wins for typical mid-sheet pans.
+                .presentationContentInteraction(.automatic)
                 .interactiveDismissDisabled(false)
             }
             .sheet(item: $settingsSite) { site in
