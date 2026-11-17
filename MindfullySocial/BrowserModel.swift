@@ -308,12 +308,18 @@ final class BrowserModel: ObservableObject {
 
     /// `-DumpIGStories` → Documents/msa-story-ad-skip-dump-*.json while browsing Stories.
     /// `-DisableStoryAdSkip` → leave sponsored stories alone for before shots.
+    /// Dumps keep running well past login so story-viewer opens are captured.
     func startStoryAdSkipProbeIfRequested() {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-DumpIGStories") || args.contains("-DisableStoryAdSkip") else { return }
         applyStoryAdSkipLaunchFlagsIfNeeded()
         guard args.contains("-DumpIGStories") else { return }
-        for delay in [4.0, 8.0, 12.0, 18.0, 26.0, 36.0, 48.0] {
+        // Early samples + dense samples through the XCUITest stories window (~3–4 min).
+        let delays: [Double] = [
+            4, 8, 12, 18, 26, 36, 48,
+            70, 90, 110, 130, 150, 170, 190, 210, 230
+        ]
+        for delay in delays {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.applyStoryAdSkipLaunchFlagsIfNeeded()
                 self?.writeStoryAdSkipDump(suffix: String(Int(delay)))
