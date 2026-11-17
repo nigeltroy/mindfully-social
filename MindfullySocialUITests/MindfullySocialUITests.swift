@@ -551,34 +551,57 @@ final class MindfullySocialUITests: XCTestCase {
             add(shot)
         }
 
-        // Login if a fresh simulator lost the WK session.
+        // Fresh 18 Pro has no WK session — drive the logged-out interstitial → form.
         if let creds = instagramCredentials() {
+            let web = app.webViews.firstMatch
+            _ = web.waitForExistence(timeout: 8)
+
+            func clearAndType(_ field: XCUIElement, text: String) {
+                field.tap()
+                Thread.sleep(forTimeInterval: 0.25)
+                if let current = field.value as? String, !current.isEmpty {
+                    let delete = String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count + 2)
+                    field.typeText(delete)
+                }
+                field.typeText(text)
+            }
+
             let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
             let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
-            if loginLink.waitForExistence(timeout: 3), loginLink.isHittable {
-                let web = app.webViews.firstMatch
-                _ = web.waitForExistence(timeout: 5)
-                loginLink.tap()
+            if loginLink.waitForExistence(timeout: 6) {
+                if loginLink.isHittable {
+                    loginLink.tap()
+                } else {
+                    // Interstitial "Log in or sign up" — tap the Log in region under the blue CTA.
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.42, dy: 0.62)).tap()
+                }
                 Thread.sleep(forTimeInterval: 3)
                 dismissIGAlerts(in: app)
-                let userField = web.textFields.firstMatch
-                if userField.waitForExistence(timeout: 8) {
-                    userField.tap()
-                    userField.typeText(creds.username)
-                    let passField = web.secureTextFields.firstMatch
-                    if passField.waitForExistence(timeout: 5) {
-                        passField.tap()
-                        passField.typeText(creds.password)
+            }
+
+            let userField = web.textFields.firstMatch
+            if userField.waitForExistence(timeout: 10) {
+                clearAndType(userField, text: creds.username)
+                let passField = web.secureTextFields.firstMatch
+                if passField.waitForExistence(timeout: 6) {
+                    clearAndType(passField, text: creds.password)
+                } else {
+                    let anyPass = web.textFields.element(boundBy: 1)
+                    if anyPass.waitForExistence(timeout: 4) {
+                        clearAndType(anyPass, text: creds.password)
                     }
-                    let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
-                    if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
-                        loginBtn.tap()
-                    } else {
-                        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
-                    }
-                    Thread.sleep(forTimeInterval: 14)
-                    dismissIGAlerts(in: app)
                 }
+                attach("stories-login-form")
+                dismissIGAlerts(in: app)
+                let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
+                if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
+                    loginBtn.tap()
+                } else {
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55)).tap()
+                }
+                Thread.sleep(forTimeInterval: 16)
+                dismissIGAlerts(in: app)
+                attach("stories-login-result")
             }
         }
 
