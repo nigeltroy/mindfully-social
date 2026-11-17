@@ -354,6 +354,41 @@ enum InstagramSearchReelsHide {
     }
   }
 
+  /** Hide stuck IG loading rings so a blank Explore does not look broken. */
+  function blankLoadingChrome() {
+    var nodes = document.querySelectorAll(
+      '[role="progressbar"], [aria-label*="Loading" i], svg[aria-label*="Loading" i]'
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (isSearchChrome(el)) continue;
+      try {
+        var r = el.getBoundingClientRect();
+        if (r.width < 8 || r.height < 8) continue;
+        if (r.bottom > window.innerHeight - 90) continue;
+        // Centered/mid content spinners only.
+        if (r.top < 70) continue;
+      } catch (e) { continue; }
+      hideNode(el, ATTR_SECTION);
+    }
+    // Circular animated SVGs commonly used as IG spinners (no accessible name).
+    var svgs = document.querySelectorAll('svg');
+    for (var s = 0; s < svgs.length; s++) {
+      var svg = svgs[s];
+      if (svg.getAttribute(ATTR_SECTION) === '1') continue;
+      if (isSearchChrome(svg)) continue;
+      try {
+        var sr = svg.getBoundingClientRect();
+        if (sr.width < 24 || sr.width > 72 || sr.height < 24 || sr.height > 72) continue;
+        if (sr.top < 90 || sr.top > window.innerHeight * 0.55) continue;
+        if (Math.abs((sr.left + sr.width / 2) - window.innerWidth / 2) > 80) continue;
+        var circle = svg.querySelector('circle');
+        if (!circle) continue;
+        hideNode(svg, ATTR_SECTION);
+      } catch (e2) {}
+    }
+  }
+
   function dismissExploreNags() {
     try {
       var nodes = document.querySelectorAll('button, [role="button"], a, div');
@@ -402,6 +437,7 @@ enum InstagramSearchReelsHide {
       blankGridRoot();
       blankAllTiles();
       blankSuggestedSections();
+      blankLoadingChrome();
     } catch (err) {
       // Keep browsing if IG DOM shifts.
     }
