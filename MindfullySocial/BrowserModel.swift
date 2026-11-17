@@ -43,6 +43,7 @@ final class BrowserModel: ObservableObject {
                     self?.canGoBack = webView.canGoBack
                     self?.applyFeedHideLaunchFlagsIfNeeded()
                     self?.applyAppPromoHideLaunchFlagsIfNeeded()
+                    self?.applyExploreBlankLaunchFlagsIfNeeded()
                 }
             }
         })
@@ -56,7 +57,7 @@ final class BrowserModel: ObservableObject {
     }
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
-    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-19 Search/Explore Reels hide
+    /// Injects MSA-16 bottom-nav Reels hide + MSA-18 feed-ad hide + MSA-22 Explore blank (search kept)
     /// + MSA-21 app-promo / use-the-app interstitial hide.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
@@ -129,9 +130,10 @@ final class BrowserModel: ObservableObject {
       : { error: 'feed_hide_missing' };
     dump.reelsInstalled = !!window.__msaReelsInstalled;
     dump.feedInstalled = !!window.__msaFeedHideInstalled;
-    dump.exploreInstalled = !!window.__msaExploreReelsInstalled;
+    dump.exploreInstalled = !!(window.__msaExploreBlankInstalled || window.__msaExploreReelsInstalled);
     dump.hasReelsStyle = !!document.getElementById('msa-hide-reels-style');
     dump.hasFeedStyle = !!document.getElementById('msa-hide-feed-ads-style');
+    dump.hasExploreBlankStyle = !!document.getElementById('msa-blank-explore-style');
     dump.bottomNav = !!document.querySelector('[data-msa-bottom-nav="1"]');
     dump.hrefSample = Array.prototype.slice.call(document.querySelectorAll('a[href]'), 0, 30).map(function (a) {
       return a.getAttribute('href');
@@ -171,13 +173,23 @@ final class BrowserModel: ObservableObject {
         }
     }
 
+    /// `-DisableExploreBlank` → show Explore grid for before shots (MSA-22).
+    private func applyExploreBlankLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableExploreBlank") else { return }
+        let js = #"(function(){try{if(window.__msaExploreBlank&&window.__msaExploreBlank.setEnabled){window.__msaExploreBlank.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
     /// When launched with `-DumpIGExplore`, periodically write explore tile dump to Documents.
     func startExploreDumpIfRequested() {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-DumpIGExplore") else { return }
+        applyExploreBlankLaunchFlagsIfNeeded()
         // Delay until IG SPA paints; repeat a few times for scroll/nav hardening.
         for delay in [4.0, 8.0, 14.0, 22.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.applyExploreBlankLaunchFlagsIfNeeded()
                 self?.writeExploreDump(suffix: String(Int(delay)))
             }
         }

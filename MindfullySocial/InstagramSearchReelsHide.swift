@@ -1,17 +1,35 @@
 import Foundation
 
-/// MSA-19: hide Reels tiles on Instagram Search / Explore inside WKWebView.
-/// Separate from `InstagramChromeTweaks` (MSA-16 bottom-nav) and MSA-18 feed-ad hide.
+/// MSA-22: blank Instagram Explore / Search landing grid (supersedes MSA-19 reels-only hide).
+/// Keeps the search bar; restores content when the user is actively searching.
+/// Still injected alongside MSA-16 bottom-nav and MSA-18 feed-ad hide.
 enum InstagramSearchReelsHide {
     /// Injected at document start alongside other Instagram user scripts.
     static let searchReelsHideUserScriptSource: String = #"""
 (function () {
-  if (window.__msaExploreReelsInstalled) return;
+  if (window.__msaExploreBlankInstalled) return;
+  window.__msaExploreBlankInstalled = true;
+  // Back-compat probe flag used by feed dump / older scripts.
   window.__msaExploreReelsInstalled = true;
 
-  var STYLE_ID = 'msa-hide-explore-reels-style';
-  var ATTR = 'data-msa-explore-reel';
-  var ATTR_SECTION = 'data-msa-explore-reel-section';
+  var STYLE_ID = 'msa-blank-explore-style';
+  var ATTR_TILE = 'data-msa-explore-blank-tile';
+  var ATTR_GRID = 'data-msa-explore-blank-grid';
+  var ATTR_SECTION = 'data-msa-explore-blank-section';
+  var enabled = true;
+
+  window.__msaExploreBlank = {
+    setEnabled: function (on) {
+      enabled = !!on;
+      if (!enabled) {
+        restoreAll();
+      } else {
+        applyBlank();
+      }
+      return enabled;
+    },
+    isEnabled: function () { return enabled; }
+  };
 
   function ensureStyle() {
     var style = document.getElementById(STYLE_ID);
@@ -21,7 +39,9 @@ enum InstagramSearchReelsHide {
       (document.head || document.documentElement).appendChild(style);
     }
     style.textContent = [
-      '[' + ATTR + '="1"] {',
+      '[' + ATTR_TILE + '="1"],',
+      '[' + ATTR_GRID + '="1"],',
+      '[' + ATTR_SECTION + '="1"] {',
       '  display: none !important;',
       '  visibility: hidden !important;',
       '  pointer-events: none !important;',
@@ -39,56 +59,6 @@ enum InstagramSearchReelsHide {
       '  flex: 0 0 0 !important;',
       '  position: absolute !important;',
       '  left: -9999px !important;',
-      '  grid-column: unset !important;',
-      '  grid-row: unset !important;',
-      '}',
-      '[' + ATTR_SECTION + '="1"] {',
-      '  display: none !important;',
-      '  pointer-events: none !important;',
-      '  height: 0 !important;',
-      '  overflow: hidden !important;',
-      '  margin: 0 !important;',
-      '  padding: 0 !important;',
-      '}',
-      /* Dense 3-col packing after Reels removal (avoids black holes from sparse absolute grid). */
-      '[data-msa-explore-reflow="1"] {',
-      '  display: grid !important;',
-      '  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;',
-      '  grid-auto-flow: dense !important;',
-      '  grid-auto-rows: minmax(118px, auto) !important;',
-      '  gap: 1px !important;',
-      '  width: 100% !important;',
-      '  box-sizing: border-box !important;',
-      '  position: relative !important;',
-      '  height: auto !important;',
-      '  min-height: 40vh !important;',
-      '}',
-      '[data-msa-explore-tile="1"] {',
-      '  position: relative !important;',
-      '  left: auto !important;',
-      '  top: auto !important;',
-      '  right: auto !important;',
-      '  bottom: auto !important;',
-      '  transform: none !important;',
-      '  inset: auto !important;',
-      '  width: 100% !important;',
-      '  max-width: none !important;',
-      '  min-width: 0 !important;',
-      '  height: auto !important;',
-      '  min-height: 118px !important;',
-      '  aspect-ratio: 1 / 1.2 !important;',
-      '  margin: 0 !important;',
-      '  box-sizing: border-box !important;',
-      '  grid-column: auto !important;',
-      '  grid-row: auto !important;',
-      '  overflow: hidden !important;',
-      '}',
-      '[data-msa-explore-tile="1"] a,',
-      '[data-msa-explore-tile="1"] img,',
-      '[data-msa-explore-tile="1"] video {',
-      '  width: 100% !important;',
-      '  height: 100% !important;',
-      '  object-fit: cover !important;',
       '}'
     ].join('\n');
   }
@@ -105,7 +75,6 @@ enum InstagramSearchReelsHide {
 
   function isReelPath(path) {
     if (!path) return false;
-    // Individual reel watch pages — not the /reels bottom-nav tab (MSA-16).
     if (path === '/reels' || path === '/reels/') return false;
     if (path.indexOf('/reel/') === 0) return true;
     if (path.indexOf('/reels/') === 0 && path.indexOf('/reels/audio') !== 0) {
@@ -115,18 +84,50 @@ enum InstagramSearchReelsHide {
     return false;
   }
 
-  function isExploreOrSearchContext() {
+  function searchInputs() {
+    return document.querySelectorAll(
+      'input[placeholder*="Search" i], input[aria-label*="Search" i], input[type="search"], input[name="search"]'
+    );
+  }
+
+  function inputValue(el) {
+    try {
+      var v = (el.value != null ? String(el.value) : '') || '';
+      if (!v && el.getAttribute) v = el.getAttribute('value') || '';
+      return v.replace(/\s+/g, ' ').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /** True when the user typed a query or IG search-results UI is active. */
+  function isActivelySearching() {
     var path = (location.pathname || '').toLowerCase();
-    if (path.indexOf('/explore') === 0) return true;
-    if (document.querySelector('input[placeholder*="Search" i], input[aria-label*="Search" i], input[type="search"]')) {
-      if (document.querySelector('a[href*="/reel/"], a[href*="/p/"]')) {
-        var active = document.activeElement;
-        if (active && active.tagName === 'INPUT') return true;
-        var searchPanel = document.querySelector('[role="dialog"], [aria-modal="true"]');
-        if (searchPanel && searchPanel.querySelector('a[href*="/reel/"], a[href*="/p/"]')) return true;
+    if (path.indexOf('/explore/search') === 0) return true;
+    if (/[?&]q=/.test(location.search || '')) return true;
+
+    var inputs = searchInputs();
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputValue(inputs[i]).length > 0) return true;
+    }
+
+    // Search results / suggestions panel with a non-empty query field inside.
+    var panels = document.querySelectorAll('[role="dialog"], [aria-modal="true"]');
+    for (var p = 0; p < panels.length; p++) {
+      var panel = panels[p];
+      var pin = panel.querySelectorAll('input');
+      for (var j = 0; j < pin.length; j++) {
+        if (inputValue(pin[j]).length > 0) return true;
       }
     }
     return false;
+  }
+
+  function isExploreLanding() {
+    var path = (location.pathname || '').toLowerCase();
+    if (path.indexOf('/explore') !== 0) return false;
+    if (isActivelySearching()) return false;
+    return true;
   }
 
   function textBlob(el) {
@@ -145,33 +146,23 @@ enum InstagramSearchReelsHide {
     }
   }
 
-  function hasClapperOrReelBadge(root) {
-    if (!root || !root.querySelectorAll) return false;
-    var blob = textBlob(root);
-    if (/\breels?\b|\bclips?\b|\bclapper/.test(blob)) return true;
-    var labeled = root.querySelectorAll('[aria-label], [alt], title, svg, img');
-    for (var i = 0; i < labeled.length; i++) {
-      var b = textBlob(labeled[i]);
-      if (/\breels?\b|\bclips?\b|\bclapper/.test(b)) return true;
-    }
-    return false;
-  }
-
-  function hasCarouselOnlyBadge(root) {
-    if (!root) return false;
-    var blob = textBlob(root);
-    var labeled = root.querySelectorAll('[aria-label], [alt], title, svg, img');
-    var parts = [blob];
-    for (var i = 0; i < labeled.length; i++) parts.push(textBlob(labeled[i]));
-    var all = parts.join(' ');
-    var isCarousel = /\bcarousel\b|\balbum\b|\bmultiple\b/.test(all);
-    var isReel = /\breels?\b|\bclips?\b|\bclapper/.test(all);
-    return isCarousel && !isReel;
-  }
-
   function countMediaLinks(el) {
     if (!el || !el.querySelectorAll) return 0;
     return el.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]').length;
+  }
+
+  function isSearchChrome(el) {
+    if (!el || !el.querySelector) return false;
+    if (el.querySelector('input[placeholder*="Search" i], input[aria-label*="Search" i], input[type="search"]')) {
+      return true;
+    }
+    // Bottom nav / primary site header — never blank those.
+    try {
+      var r = el.getBoundingClientRect();
+      if (r.bottom > window.innerHeight - 110 && r.top > window.innerHeight - 220) return true;
+      if (r.top < 90 && r.height < 120 && r.width > window.innerWidth * 0.6) return true;
+    } catch (e) {}
+    return false;
   }
 
   // Prefer the smallest single-post cell — never a multi-tile row/grid parent.
@@ -180,7 +171,7 @@ enum InstagramSearchReelsHide {
     var best = null;
     var depth = 0;
     while (node && node !== document.body && depth < 10) {
-      if (node.getAttribute && node.getAttribute(ATTR) === '1') return node;
+      if (node.getAttribute && node.getAttribute(ATTR_TILE) === '1') return node;
       var tag = (node.tagName || '').toLowerCase();
       if (tag === 'article' && countMediaLinks(node) <= 1) return node;
       try {
@@ -203,7 +194,6 @@ enum InstagramSearchReelsHide {
           var sr = parent.children[i].getBoundingClientRect();
           if (sr.width >= 72 && sr.height >= 72) mediaKids++;
         }
-        // Stop at the cell (current node) when siblings look like a grid.
         if (mediaKids >= 2 && countMediaLinks(node) <= 1) return node;
       }
       node = parent;
@@ -212,31 +202,51 @@ enum InstagramSearchReelsHide {
     return best || el;
   }
 
-  function shouldHideTile(tile, reelHref) {
-    if (!tile) return false;
-    if (reelHref) return true;
-    if (hasClapperOrReelBadge(tile)) return true;
-    // Do not hide pure carousel/photo cells.
-    if (hasCarouselOnlyBadge(tile)) return false;
-    return false;
+  function hideNode(node, attr) {
+    if (!node || node.nodeType !== 1) return;
+    if (isSearchChrome(node)) return;
+    if (node.getAttribute(attr) === '1') return;
+    node.setAttribute(attr, '1');
+    try {
+      node.style.setProperty('display', 'none', 'important');
+      node.style.setProperty('pointer-events', 'none', 'important');
+      node.style.setProperty('height', '0', 'important');
+      node.style.setProperty('width', '0', 'important');
+      node.style.setProperty('margin', '0', 'important');
+      node.style.setProperty('padding', '0', 'important');
+      node.style.setProperty('overflow', 'hidden', 'important');
+      node.style.setProperty('opacity', '0', 'important');
+    } catch (e) {}
   }
 
-  function hideTile(tile) {
-    if (!tile || tile.nodeType !== 1) return;
-    if (tile.getAttribute(ATTR) === '1') return;
-    tile.setAttribute(ATTR, '1');
-    tile.removeAttribute('data-msa-explore-tile');
-    try {
-      tile.style.setProperty('display', 'none', 'important');
-      tile.style.setProperty('pointer-events', 'none', 'important');
-      tile.style.setProperty('width', '0', 'important');
-      tile.style.setProperty('height', '0', 'important');
-      tile.style.setProperty('margin', '0', 'important');
-      tile.style.setProperty('padding', '0', 'important');
-      tile.style.setProperty('overflow', 'hidden', 'important');
-      tile.style.setProperty('grid-column', 'unset', 'important');
-      tile.style.setProperty('grid-row', 'unset', 'important');
-    } catch (e) {}
+  function clearAttr(attr) {
+    var nodes = document.querySelectorAll('[' + attr + '="1"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var n = nodes[i];
+      n.removeAttribute(attr);
+      try {
+        n.style.removeProperty('display');
+        n.style.removeProperty('pointer-events');
+        n.style.removeProperty('height');
+        n.style.removeProperty('width');
+        n.style.removeProperty('margin');
+        n.style.removeProperty('padding');
+        n.style.removeProperty('overflow');
+        n.style.removeProperty('opacity');
+        n.style.removeProperty('visibility');
+        n.style.removeProperty('position');
+        n.style.removeProperty('left');
+        n.style.removeProperty('min-height');
+        n.style.removeProperty('max-height');
+        n.style.removeProperty('flex');
+      } catch (e) {}
+    }
+  }
+
+  function restoreAll() {
+    clearAttr(ATTR_TILE);
+    clearAttr(ATTR_GRID);
+    clearAttr(ATTR_SECTION);
   }
 
   function findExploreGridRoot() {
@@ -248,12 +258,20 @@ enum InstagramSearchReelsHide {
       var node = a.parentElement;
       var depth = 0;
       while (node && node !== document.body && depth < 8) {
+        if (isSearchChrome(node)) {
+          node = node.parentElement;
+          depth++;
+          continue;
+        }
         var kids = node.children ? node.children.length : 0;
         if (kids >= 3) {
           var mediaKids = 0;
-          for (var k = 0; k < Math.min(kids, 24); k++) {
+          for (var k = 0; k < Math.min(kids, 36); k++) {
             var child = node.children[k];
-            if (child.getAttribute && child.getAttribute(ATTR) === '1') continue;
+            if (child.getAttribute && child.getAttribute(ATTR_TILE) === '1') {
+              mediaKids++;
+              continue;
+            }
             var r = child.getBoundingClientRect();
             if (r.width >= 60 && r.height >= 60) mediaKids++;
             else if (child.querySelector && child.querySelector('a[href*="/p/"], a[href*="/reel/"]')) mediaKids++;
@@ -267,52 +285,72 @@ enum InstagramSearchReelsHide {
         depth++;
       }
     }
-    return bestScore >= 3 ? best : null;
+    return bestScore >= 2 ? best : null;
   }
 
-  function reflowExploreGrid() {
+  function blankGridRoot() {
     var root = findExploreGridRoot();
     if (!root) return;
-    // Only reflow when we actually hid something in/near this root.
-    if (!root.querySelector('[' + ATTR + '="1"]') &&
-        document.querySelectorAll('[' + ATTR + '="1"]').length === 0) {
-      return;
+    // Prefer hiding a parent that owns the whole mosaic, not the search header.
+    var wrap = root;
+    for (var d = 0; d < 4 && wrap.parentElement; d++) {
+      var parent = wrap.parentElement;
+      if (isSearchChrome(parent)) break;
+      var pr = parent.getBoundingClientRect();
+      var rr = wrap.getBoundingClientRect();
+      // Climb while parent is still mainly the grid content area.
+      if (pr.top < 70) break;
+      if (pr.height > rr.height * 1.35 && parent.querySelector &&
+          parent.querySelector('input[placeholder*="Search" i], input[aria-label*="Search" i]')) {
+        break;
+      }
+      if (countMediaLinks(parent) >= countMediaLinks(wrap)) {
+        wrap = parent;
+      } else {
+        break;
+      }
     }
-    root.setAttribute('data-msa-explore-reflow', '1');
-    try {
-      root.style.setProperty('display', 'grid', 'important');
-      root.style.setProperty('grid-template-columns', 'repeat(3, minmax(0, 1fr))', 'important');
-      root.style.setProperty('grid-auto-flow', 'dense', 'important');
-      root.style.setProperty('grid-auto-rows', 'minmax(118px, auto)', 'important');
-      root.style.setProperty('gap', '1px', 'important');
-      root.style.setProperty('height', 'auto', 'important');
-      root.style.setProperty('min-height', '40vh', 'important');
-    } catch (e) {}
+    hideNode(wrap, ATTR_GRID);
+  }
 
-    for (var i = 0; i < root.children.length; i++) {
-      var child = root.children[i];
-      if (child.getAttribute && child.getAttribute(ATTR) === '1') continue;
-      var hasMedia = child.querySelector && child.querySelector('a[href*="/p/"], a[href*="/reel/"], img, video');
-      if (!hasMedia) continue;
-      var cr = child.getBoundingClientRect();
-      if (cr.height > 0 && cr.height < 40 && cr.width > window.innerWidth * 0.8) continue;
-      child.setAttribute('data-msa-explore-tile', '1');
+  function blankAllTiles() {
+    var anchors = document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]');
+    for (var i = 0; i < anchors.length; i++) {
+      var a = anchors[i];
+      var p = pathOf(a);
+      if (p === '/reels' || p === '/reels/') continue;
+      if (!(p.indexOf('/p/') === 0 || isReelPath(p) || p.indexOf('/reel/') === 0)) continue;
+      var tile = findTileFrom(a);
+      if (!tile || isSearchChrome(tile)) continue;
       try {
-        child.style.setProperty('position', 'relative', 'important');
-        child.style.setProperty('left', 'auto', 'important');
-        child.style.setProperty('top', 'auto', 'important');
-        child.style.setProperty('right', 'auto', 'important');
-        child.style.setProperty('bottom', 'auto', 'important');
-        child.style.setProperty('transform', 'none', 'important');
-        child.style.setProperty('width', '100%', 'important');
-        child.style.setProperty('height', 'auto', 'important');
-        child.style.setProperty('min-height', '118px', 'important');
-        child.style.setProperty('aspect-ratio', '1 / 1.2', 'important');
-        child.style.setProperty('margin', '0', 'important');
-        child.style.setProperty('grid-column', 'auto', 'important');
-        child.style.setProperty('grid-row', 'auto', 'important');
-        child.style.setProperty('overflow', 'hidden', 'important');
-      } catch (e2) {}
+        var tr = tile.getBoundingClientRect();
+        // Skip full-screen post viewers if any.
+        if (tr.width > window.innerWidth * 0.85 && tr.height > window.innerHeight * 0.55) continue;
+      } catch (e) {}
+      hideNode(tile, ATTR_TILE);
+    }
+  }
+
+  function blankSuggestedSections() {
+    var nodes = document.querySelectorAll('h1, h2, h3, h4, span, div, a, button');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      if (el.getAttribute(ATTR_SECTION) === '1') continue;
+      var raw = (el.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!raw || raw.length > 48) continue;
+      if (!/^(reels|clips|reels for you|suggested for you|for you|popular|accounts|places|tags|audio)$/i.test(raw)) {
+        continue;
+      }
+      var r = el.getBoundingClientRect();
+      if (r.width < 20 || r.height < 10 || r.height > 100) continue;
+      if (r.bottom > window.innerHeight - 100) continue; // bottom nav
+      var wrap = el;
+      for (var d = 0; d < 6 && wrap.parentElement; d++) {
+        wrap = wrap.parentElement;
+        if (wrap.querySelector && wrap.querySelector('a[href*="/reel/"], a[href*="/p/"], img, video')) break;
+      }
+      if (isSearchChrome(wrap)) continue;
+      hideNode(wrap, ATTR_SECTION);
     }
   }
 
@@ -347,92 +385,23 @@ enum InstagramSearchReelsHide {
     } catch (e) {}
   }
 
-  function hideReelSections() {
-    var nodes = document.querySelectorAll('h1, h2, h3, h4, span, div, a');
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (el.getAttribute(ATTR_SECTION) === '1') continue;
-      var raw = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!raw) continue;
-      if (!/^(reels|clips)$/i.test(raw) && !/^reels for you$/i.test(raw)) continue;
-      var r = el.getBoundingClientRect();
-      if (r.width < 20 || r.height < 10 || r.height > 80) continue;
-      var wrap = el;
-      for (var d = 0; d < 6 && wrap.parentElement; d++) {
-        wrap = wrap.parentElement;
-        if (wrap.querySelector && wrap.querySelector('a[href*="/reel/"]')) break;
-      }
-      if (!wrap.querySelector || !wrap.querySelector('a[href*="/reel/"]')) continue;
-      wrap.setAttribute(ATTR_SECTION, '1');
-      try {
-        wrap.style.setProperty('display', 'none', 'important');
-      } catch (e) {}
-    }
-  }
-
-  function hideReelFilterChips() {
-    var chips = document.querySelectorAll('a, button, [role="tab"], [role="button"]');
-    for (var i = 0; i < chips.length; i++) {
-      var el = chips[i];
-      var label = (
-        (el.getAttribute('aria-label') || '') + ' ' + (el.textContent || '')
-      ).replace(/\s+/g, ' ').trim().toLowerCase();
-      if (label !== 'reels' && label !== 'clips') continue;
-      var r = el.getBoundingClientRect();
-      if (r.height < 20 || r.height > 64) continue;
-      if (r.width < 28 || r.width > 160) continue;
-      // Mid-page chips only — bottom-nav /reels owned by MSA-16.
-      if (r.bottom > window.innerHeight - 100) continue;
-      el.setAttribute(ATTR_SECTION, '1');
-      try {
-        el.style.setProperty('display', 'none', 'important');
-      } catch (e) {}
-    }
-  }
-
-  function applyExplore() {
+  function applyBlank() {
     try {
       ensureStyle();
-      if (!isExploreOrSearchContext()) return;
+      if (!enabled) {
+        restoreAll();
+        return;
+      }
+      if (!isExploreLanding()) {
+        // Searching or left Explore — restore so results / other pages show normally.
+        restoreAll();
+        return;
+      }
 
       dismissExploreNags();
-      hideReelSections();
-      hideReelFilterChips();
-
-      var anchors = document.querySelectorAll('a[href]');
-      for (var i = 0; i < anchors.length; i++) {
-        var a = anchors[i];
-        var p = pathOf(a);
-        var reelHref = isReelPath(p);
-        if (p === '/reels' || p === '/reels/') continue;
-        // Candidate: reel href on the anchor, or any /p/ cell that may carry a Reel badge overlay.
-        if (!reelHref && p.indexOf('/p/') !== 0) continue;
-
-        var tile = findTileFrom(a);
-        if (!shouldHideTile(tile, reelHref)) continue;
-        try {
-          var tr = tile.getBoundingClientRect();
-          if (tr.width > window.innerWidth * 0.7 && tr.height > window.innerHeight * 0.5) {
-            continue;
-          }
-        } catch (e) {}
-        hideTile(tile);
-      }
-
-      // Second pass: walk visible cells; hide when the cell (not just the <a>) has a Reel badge.
-      var media = document.querySelectorAll('article, a[href*="/p/"], a[href*="/reel/"]');
-      for (var j = 0; j < media.length; j++) {
-        var m = media[j];
-        if (m.getAttribute && m.getAttribute(ATTR) === '1') continue;
-        var tile2 = findTileFrom(m);
-        if (!tile2 || (tile2.getAttribute && tile2.getAttribute(ATTR) === '1')) continue;
-        if (hasCarouselOnlyBadge(tile2)) continue;
-        var innerReel = tile2.querySelector && tile2.querySelector('a[href*="/reel/"]');
-        if (!shouldHideTile(tile2, !!innerReel)) continue;
-        hideTile(tile2);
-      }
-
-      reflowExploreGrid();
+      blankGridRoot();
+      blankAllTiles();
+      blankSuggestedSections();
     } catch (err) {
       // Keep browsing if IG DOM shifts.
     }
@@ -441,13 +410,20 @@ enum InstagramSearchReelsHide {
   window.__msaDumpExploreReels = function () {
     var tiles = [];
     var hiddenTiles = [];
+    var visibleTiles = [];
     var anchors = document.querySelectorAll('a[href]');
     for (var i = 0; i < Math.min(anchors.length, 500); i++) {
       var a = anchors[i];
       var p = pathOf(a);
       if (!(isReelPath(p) || /\/p\//.test(p) || /\/reel\//.test(p))) continue;
       var r = a.getBoundingClientRect();
-      var hidden = !!(a.closest && a.closest('[' + ATTR + '="1"]'));
+      var hidden = !!(
+        a.closest && (
+          a.closest('[' + ATTR_TILE + '="1"]') ||
+          a.closest('[' + ATTR_GRID + '="1"]') ||
+          a.closest('[' + ATTR_SECTION + '="1"]')
+        )
+      );
       var entry = {
         href: p,
         reel: isReelPath(p),
@@ -460,6 +436,7 @@ enum InstagramSearchReelsHide {
         y: Math.round(r.top)
       };
       if (hidden) hiddenTiles.push(entry);
+      else if (r.width >= 4 && r.height >= 4) visibleTiles.push(entry);
       if (r.width >= 4 && r.height >= 4) tiles.push(entry);
     }
     var bottomNav = [];
@@ -477,13 +454,32 @@ enum InstagramSearchReelsHide {
         x: Math.round(br.left)
       });
     }
+    var searchCount = 0;
+    var searchVals = [];
+    var sins = searchInputs();
+    for (var s = 0; s < sins.length; s++) {
+      searchCount++;
+      searchVals.push(inputValue(sins[s]).slice(0, 40));
+    }
     return JSON.stringify({
+      mode: 'explore-blank-v1',
       path: location.pathname,
-      exploreContext: isExploreOrSearchContext(),
-      hiddenCount: document.querySelectorAll('[' + ATTR + '="1"]').length,
+      exploreLanding: isExploreLanding(),
+      activelySearching: isActivelySearching(),
+      enabled: enabled,
+      searchInputCount: searchCount,
+      searchValues: searchVals,
+      hiddenCount:
+        document.querySelectorAll('[' + ATTR_TILE + '="1"]').length +
+        document.querySelectorAll('[' + ATTR_GRID + '="1"]').length +
+        document.querySelectorAll('[' + ATTR_SECTION + '="1"]').length,
+      tileHidden: document.querySelectorAll('[' + ATTR_TILE + '="1"]').length,
+      gridHidden: document.querySelectorAll('[' + ATTR_GRID + '="1"]').length,
       sectionHidden: document.querySelectorAll('[' + ATTR_SECTION + '="1"]').length,
+      visibleMediaTiles: visibleTiles.length,
       bottomNav: bottomNav,
       hiddenTiles: hiddenTiles.slice(0, 40),
+      visibleTiles: visibleTiles.slice(0, 40),
       tiles: tiles.slice(0, 80)
     });
   };
@@ -493,20 +489,20 @@ enum InstagramSearchReelsHide {
     if (scheduled) return;
     scheduled = setTimeout(function () {
       scheduled = null;
-      applyExplore();
+      applyBlank();
     }, 60);
   }
 
   var mo = new MutationObserver(schedule);
   function start() {
     ensureStyle();
-    applyExplore();
+    applyBlank();
     try {
       mo.observe(document.documentElement, {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['href', 'class', 'style', 'aria-label']
+        attributeFilter: ['href', 'class', 'style', 'aria-label', 'value']
       });
     } catch (e) {}
   }
@@ -518,6 +514,8 @@ enum InstagramSearchReelsHide {
   window.addEventListener('popstate', schedule);
   window.addEventListener('hashchange', schedule);
   document.addEventListener('visibilitychange', schedule);
+  document.addEventListener('input', schedule, true);
+  document.addEventListener('keyup', schedule, true);
   try {
     var _push = history.pushState;
     history.pushState = function () {
@@ -532,7 +530,7 @@ enum InstagramSearchReelsHide {
       return ret;
     };
   } catch (e) {}
-  setInterval(applyExplore, 700);
+  setInterval(applyBlank, 700);
 })();
 """#
 

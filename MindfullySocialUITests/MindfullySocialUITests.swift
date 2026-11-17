@@ -252,7 +252,7 @@ final class MindfullySocialUITests: XCTestCase {
         }
     }
 
-    /// Opens Instagram Explore, exercises Search, scrolls, and captures proof screenshots.
+    /// MSA-22: Explore landing blank (search bar only); search query still shows results.
     /// Uses persisted WK session when available; falls back to env login fill if needed.
     @MainActor
     func testInstagramSearchHidesReels() throws {
@@ -367,16 +367,16 @@ final class MindfullySocialUITests: XCTestCase {
             add(att)
         }
 
-        attach("explore-initial")
+        attach("explore-blank-initial")
 
-        // Scroll explore grid (drag webview).
+        // Scroll blank content area (should stay empty — no grid tiles).
         let webView = app.otherElements["browserWebView"].exists
             ? app.otherElements["browserWebView"]
             : app.webViews.firstMatch
-        for i in 1...4 {
+        for i in 1...3 {
             webView.swipeUp()
-            Thread.sleep(forTimeInterval: 1.2)
-            if i == 2 || i == 4 { attach("explore-scroll-\(i)") }
+            Thread.sleep(forTimeInterval: 1.0)
+            if i == 2 { attach("explore-blank-scroll") }
         }
 
         // Tap Search / Explore bottom tab if present (SPA return path).
@@ -385,24 +385,24 @@ final class MindfullySocialUITests: XCTestCase {
         if searchTab.waitForExistence(timeout: 2), searchTab.isHittable {
             searchTab.tap()
             Thread.sleep(forTimeInterval: 2)
-            attach("explore-tab-retap")
+            attach("explore-blank-tab-retap")
         }
 
-        // Type a query into search field if available.
+        // Type a query — results must appear (blanking lifts while searching).
         let searchField = app.webViews.textFields.firstMatch
         if searchField.waitForExistence(timeout: 4) {
             searchField.tap()
             Thread.sleep(forTimeInterval: 0.5)
             searchField.typeText("nature")
-            Thread.sleep(forTimeInterval: 4)
-            attach("search-query-nature")
+            Thread.sleep(forTimeInterval: 5)
+            attach("search-results-nature")
             // Clear / close results by tapping cancel or back-ish control if present.
             let cancelPred = NSPredicate(format: "label ==[c] %@ OR label ==[c] %@", "Cancel", "Clear")
             let cancel = app.descendants(matching: .any).matching(cancelPred).firstMatch
             if cancel.waitForExistence(timeout: 2), cancel.isHittable {
                 cancel.tap()
                 Thread.sleep(forTimeInterval: 2)
-                attach("search-closed")
+                attach("search-closed-blank-again")
             } else {
                 // Tap outside / navigate home then back to explore.
                 let homePred = NSPredicate(format: "label ==[c] %@", "Home")
@@ -414,7 +414,7 @@ final class MindfullySocialUITests: XCTestCase {
                     if searchTab.waitForExistence(timeout: 3), searchTab.isHittable {
                         searchTab.tap()
                         Thread.sleep(forTimeInterval: 3)
-                        attach("return-to-explore")
+                        attach("return-to-explore-blank")
                     }
                 }
             }
@@ -430,12 +430,12 @@ final class MindfullySocialUITests: XCTestCase {
             if searchTab.waitForExistence(timeout: 3), searchTab.isHittable {
                 searchTab.tap()
                 Thread.sleep(forTimeInterval: 3)
-                attach("return-to-explore")
+                attach("return-to-explore-blank")
             }
         }
 
         Thread.sleep(forTimeInterval: 3)
-        attach("explore-final")
+        attach("explore-blank-final")
         // Keep process alive briefly so -DumpIGExplore timers can flush.
         Thread.sleep(forTimeInterval: 6)
     }
