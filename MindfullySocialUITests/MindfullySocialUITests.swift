@@ -37,16 +37,15 @@ final class MindfullySocialUITests: XCTestCase {
         openAtt.lifetime = .keepAlways
         add(openAtt)
 
+        // Sheet may leave home title in the hierarchy — require a hittable home row.
         dismissBrowser(in: app)
-        // Extra swipe if sheet tip/webview still up.
-        if app.staticTexts["browserSwipeTip"].exists || app.otherElements["browserWebView"].exists {
+        for _ in 0..<4 where !reddit.isHittable {
             dismissBrowser(in: app)
         }
-        XCTAssertTrue(title.waitForExistence(timeout: 15), "swipe dismiss did not return home")
-        XCTAssertFalse(
-            app.otherElements["browserWebView"].waitForExistence(timeout: 1),
-            "browser sheet still present after dismiss"
-        )
+        XCTAssertTrue(reddit.waitForExistence(timeout: 15) && reddit.isHittable,
+                      "swipe dismiss did not restore hittable Reddit home row")
+        XCTAssertFalse(app.staticTexts["browserSwipeTip"].exists,
+                       "swipe tip still visible after dismiss")
         // Hold home on-screen so continuous Tart video clearly shows dismiss → list.
         Thread.sleep(forTimeInterval: 8)
         let afterShot = app.screenshot()
@@ -715,17 +714,21 @@ final class MindfullySocialUITests: XCTestCase {
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
     }
 
-    /// Sheet-style dismiss: drag from near the top drag indicator down.
+    /// Sheet-style dismiss: slow drag from grabber / tip through to bottom.
     @MainActor
     private func dismissBrowser(in app: XCUIApplication) {
-        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06))
-        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92))
-        start.press(forDuration: 0.05, thenDragTo: end)
-        Thread.sleep(forTimeInterval: 0.8)
-        // Retry once if sheet still covers home.
-        if !app.staticTexts["appTitle"].waitForExistence(timeout: 2) {
-            start.press(forDuration: 0.05, thenDragTo: end)
-            Thread.sleep(forTimeInterval: 0.8)
+        let start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.04))
+        let mid = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.98))
+        start.press(forDuration: 0.15, thenDragTo: mid)
+        Thread.sleep(forTimeInterval: 0.15)
+        mid.press(forDuration: 0.05, thenDragTo: end)
+        Thread.sleep(forTimeInterval: 0.9)
+        // Fallback full-length fling if sheet tip still up.
+        if app.staticTexts["browserSwipeTip"].exists || !app.buttons["site-reddit"].isHittable {
+            let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.03))
+            top.press(forDuration: 0.2, thenDragTo: end)
+            Thread.sleep(forTimeInterval: 0.9)
         }
     }
 }
