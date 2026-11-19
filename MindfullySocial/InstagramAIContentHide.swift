@@ -46,6 +46,11 @@ enum InstagramAIContentHide {
     'about ai': 'ai-info',
     'about this ai': 'ai-info',
     'ai label': 'ai-info',
+    'this media was created using ai': 'ai-info',
+    'this media may have been created or edited using ai': 'ai-info',
+    'created using ai': 'generated-with-ai',
+    'edited using ai': 'ai-info',
+    'modified using ai': 'ai-info',
     'ai sticker': 'ai-sticker',
     'ai stickers': 'ai-sticker',
     'add ai sticker': 'ai-sticker',
@@ -85,6 +90,8 @@ enum InstagramAIContentHide {
     { re: /\bcontains ai([-\s]generated)?( content)?\b/, reason: 'ai-generated' },
     { re: /\bai may be used\b/, reason: 'ai-info' },
     { re: /\b(ai info|about (this )?ai|ai label)\b/, reason: 'ai-info' },
+    { re: /\bthis media (was created|may have been created or edited) using ai\b/, reason: 'ai-info' },
+    { re: /\b(created|edited|modified) using ai\b/, reason: 'ai-info' },
     { re: /\bai sticker(s)?\b/, reason: 'ai-sticker' },
     { re: /\badd ai sticker\b/, reason: 'ai-sticker' },
     { re: /\b(meta )?ai studio\b/, reason: 'ai-studio' },
@@ -759,8 +766,16 @@ enum InstagramAIContentHide {
         return el;
       }
 
-      // 1) Made with AI chip — prefer inside article so whole-card hide is proven.
+      // 1) Current Meta label "AI info" + legacy "Made with AI" — inside article
+      //    so whole-card hide matches SocialLite-style AI post filtering.
       var chip = plant(
+        'div',
+        'AI info',
+        { role: 'button', 'aria-label': 'AI info' },
+        'display:inline-block;margin:8px;padding:6px 10px;border-radius:8px;' +
+          'background:#111;color:#fff;font:600 12px/1.2 -apple-system,sans-serif;'
+      );
+      var chipLegacy = plant(
         'div',
         'Made with AI',
         { role: 'button' },
@@ -769,10 +784,14 @@ enum InstagramAIContentHide {
       );
       if (article) {
         article.insertBefore(chip, article.firstChild);
+        article.insertBefore(chipLegacy, article.firstChild);
       } else {
         chip.style.cssText +=
           'position:fixed;z-index:2147483646;left:12px;top:96px;';
+        chipLegacy.style.cssText +=
+          'position:fixed;z-index:2147483646;left:12px;top:132px;';
         document.documentElement.appendChild(chip);
+        document.documentElement.appendChild(chipLegacy);
       }
 
       // 2) Ask Meta AI entry
