@@ -14,7 +14,7 @@ enum InstagramAIContentHide {
   var STYLE_ID = 'msa-hide-ai-content-style';
   var MARK = 'data-msa-ai-hide';
   var REASON = 'data-msa-ai-hide-reason';
-  var SCRIPT_CANARY = 'aihide-v2';
+  var SCRIPT_CANARY = 'aihide-v3';
   var enabled = true;
 
   // Exact / short chrome labels (normalized).
@@ -183,16 +183,31 @@ enum InstagramAIContentHide {
     );
   }
 
-  function collapse(el, reason) {
-    if (!el || el === document.body || el === document.documentElement) return false;
-    if (el.getAttribute(MARK) === '1') return false;
-    if (isInBottomNav(el)) return false;
-    // Never collapse the whole main feed / explore page shell.
+  function isPageShell(el) {
+    if (!el || el === document || el === document.documentElement || el === document.body) {
+      return true;
+    }
     try {
       var tag = (el.tagName || '').toLowerCase();
-      if (tag === 'main' || tag === 'html' || tag === 'body') return false;
-      if (el.getAttribute && el.getAttribute('role') === 'main') return false;
+      if (tag === 'html' || tag === 'body' || tag === 'main' || tag === 'head') return true;
+      if (el.getAttribute && el.getAttribute('role') === 'main') return true;
+      // Full-viewport shell (never collapse / never promote into).
+      var r = el.getBoundingClientRect && el.getBoundingClientRect();
+      if (
+        r &&
+        r.width >= window.innerWidth * 0.95 &&
+        r.height >= window.innerHeight * 0.9
+      ) {
+        return true;
+      }
     } catch (e) {}
+    return false;
+  }
+
+  function collapse(el, reason) {
+    if (!el || isPageShell(el)) return false;
+    if (el.getAttribute(MARK) === '1') return false;
+    if (isInBottomNav(el)) return false;
     el.setAttribute(MARK, '1');
     el.setAttribute(REASON, reason || 'ai');
     el.setAttribute('aria-hidden', 'true');
@@ -219,11 +234,14 @@ enum InstagramAIContentHide {
   }
 
   function isSubstantialCard(n) {
-    if (!n || !n.getBoundingClientRect) return false;
+    if (!n || isPageShell(n) || !n.getBoundingClientRect) return false;
     try {
       var r = n.getBoundingClientRect();
       var minW = Math.min(240, window.innerWidth * 0.55);
-      // Tall enough to be a post/tile (not a 24px chip).
+      // Tall enough to be a post/tile (not a 24px chip); not the page shell.
+      if (r.width >= window.innerWidth * 0.95 && r.height >= window.innerHeight * 0.85) {
+        return false;
+      }
       return r.width >= minW && r.height >= 72;
     } catch (e) {
       return false;
@@ -232,7 +250,7 @@ enum InstagramAIContentHide {
 
   function findExploreTile(el) {
     var n = el;
-    for (var d = 0; d < 12 && n && n !== document.body; d++) {
+    for (var d = 0; d < 12 && n && !isPageShell(n); d++) {
       try {
         var tag = (n.tagName || '').toLowerCase();
         if (tag === 'a') {
@@ -242,20 +260,33 @@ enum InstagramAIContentHide {
             href.indexOf('/reel/') !== -1 ||
             href.indexOf('/tv/') !== -1
           ) {
-            // Prefer the grid cell wrapper when the <a> is only the media.
+            // Prefer the grid cell wrapper when the <a> is only the media —
+            // but never promote into html/body (fixed sim tiles append there).
             var parent = n.parentElement;
-            if (parent && isSubstantialCard(parent) && parent.children.length <= 4) {
+            if (
+              parent &&
+              !isPageShell(parent) &&
+              isSubstantialCard(parent) &&
+              parent.children.length <= 4
+            ) {
               return parent;
             }
-            if (isSubstantialCard(n)) return n;
-            return parent && isSubstantialCard(parent) ? parent : n;
+            return n;
           }
         }
         // Explore masonry cell: wide-ish sibling in a multi-child row.
         if (isSubstantialCard(n)) {
           var p = n.parentElement;
-          if (p && p.children && p.children.length >= 2 && p.children.length <= 12) {
-            var media = n.querySelector && n.querySelector('img, video, a[href*="/p/"], a[href*="/reel/"]');
+          if (
+            p &&
+            !isPageShell(p) &&
+            p.children &&
+            p.children.length >= 2 &&
+            p.children.length <= 12
+          ) {
+            var media =
+              n.querySelector &&
+              n.querySelector('img, video, a[href*="/p/"], a[href*="/reel/"]');
             if (media) return n;
           }
         }
@@ -329,7 +360,7 @@ enum InstagramAIContentHide {
   function findCardRoot(el) {
     if (!el) return null;
     var n = el;
-    for (var d = 0; d < 16 && n && n !== document.body; d++) {
+    for (var d = 0; d < 16 && n && !isPageShell(n); d++) {
       var tag = (n.tagName || '').toLowerCase();
       if (tag === 'article') return n;
       var role = (n.getAttribute && n.getAttribute('role')) || '';
@@ -338,22 +369,20 @@ enum InstagramAIContentHide {
     }
 
     var story = findStoryRoot(el);
-    if (story) return story;
+    if (story && !isPageShell(story)) return story;
 
     var tile = findExploreTile(el);
-    if (tile) return tile;
+    if (tile && !isPageShell(tile)) return tile;
 
     // Feed-unit climb (same idea as MSA-18): wide sibling block.
     n = el;
-    for (var depth = 0; depth < 14 && n && n !== document.body; depth++) {
+    for (var depth = 0; depth < 14 && n && !isPageShell(n); depth++) {
       try {
-        var t = (n.tagName || '').toLowerCase();
-        if (t === 'main' || t === 'body' || t === 'html') break;
         var r = n.getBoundingClientRect();
         var minW = Math.min(280, window.innerWidth * 0.7);
-        if (r && r.height >= 96 && r.width >= minW) {
+        if (r && r.height >= 96 && r.width >= minW && !isPageShell(n)) {
           var parent = n.parentElement;
-          if (parent && parent.children && parent.children.length >= 2) {
+          if (parent && !isPageShell(parent) && parent.children && parent.children.length >= 2) {
             // Prefer a unit that looks like header+media, not media alone.
             var hasHeaderish =
               n.querySelector &&
@@ -404,26 +433,49 @@ enum InstagramAIContentHide {
 
   /// Whole card for AI-labeled posts/tiles; chrome-only for floating Meta AI bars.
   function pickRoot(el, reason) {
+    var root = null;
     if (isPostLabelReason(reason)) {
-      return findPostRoot(el);
-    }
-    if (isEntryPointReason(reason)) {
+      root = findPostRoot(el);
+    } else if (isEntryPointReason(reason)) {
       // Only escalate to a card when the hit is already nested in one —
       // never promote a top search/FAB into a full header collapse.
       var n = el;
-      for (var d = 0; d < 16 && n && n !== document.body; d++) {
+      for (var d = 0; d < 16 && n && !isPageShell(n); d++) {
         var tag = (n.tagName || '').toLowerCase();
-        if (tag === 'article') return n;
+        if (tag === 'article') {
+          root = n;
+          break;
+        }
         var role = (n.getAttribute && n.getAttribute('role')) || '';
-        if (role === 'article') return n;
+        if (role === 'article') {
+          root = n;
+          break;
+        }
         n = n.parentElement;
       }
-      var tile = findExploreTile(el);
-      if (tile && isSubstantialCard(tile)) return tile;
-      var story = findStoryRoot(el);
-      if (story && isSubstantialCard(story)) return story;
+      if (!root) {
+        var tile = findExploreTile(el);
+        if (tile && !isPageShell(tile)) root = tile;
+      }
+      if (!root) {
+        var story = findStoryRoot(el);
+        if (story && !isPageShell(story)) root = story;
+      }
+      if (!root) root = findChromeRoot(el);
+    } else {
+      root = findChromeRoot(el);
     }
-    return findChromeRoot(el);
+    // If climb hit the page shell, hide the matched node itself (sim tiles,
+    // fixed chips) so Made with AI never survives a failed whole-card collapse.
+    if (!root || isPageShell(root)) return el;
+    return root;
+  }
+
+  function collapseHit(el, reason) {
+    var root = pickRoot(el, reason);
+    if (collapse(root, reason)) return true;
+    if (root !== el && collapse(el, reason)) return true;
+    return false;
   }
 
   function ownVisibleText(el) {
@@ -645,14 +697,12 @@ enum InstagramAIContentHide {
       var hiddenNow = 0;
       var hits = scanTextTriggers(document);
       for (var i = 0; i < hits.length; i++) {
-        var root = pickRoot(hits[i].el, hits[i].reason);
-        if (collapse(root, hits[i].reason)) hiddenNow++;
+        if (collapseHit(hits[i].el, hits[i].reason)) hiddenNow++;
       }
 
       var hrefHits = scanAIHrefs(document);
       for (var j = 0; j < hrefHits.length; j++) {
-        var hrefRoot = pickRoot(hrefHits[j].el, hrefHits[j].reason);
-        if (collapse(hrefRoot, hrefHits[j].reason)) hiddenNow++;
+        if (collapseHit(hrefHits[j].el, hrefHits[j].reason)) hiddenNow++;
       }
 
       var articles = scanArticlesForAI(document);
@@ -801,6 +851,7 @@ enum InstagramAIContentHide {
         'display:inline-block;margin:8px;padding:6px 10px;border-radius:8px;' +
           'background:#111;color:#fff;font:600 12px/1.2 -apple-system,sans-serif;'
       );
+      var mount = document.body || document.documentElement;
       if (article) {
         article.insertBefore(chip, article.firstChild);
         article.insertBefore(chipLegacy, article.firstChild);
@@ -809,8 +860,8 @@ enum InstagramAIContentHide {
           'position:fixed;z-index:2147483646;left:12px;top:96px;';
         chipLegacy.style.cssText +=
           'position:fixed;z-index:2147483646;left:12px;top:132px;';
-        document.documentElement.appendChild(chip);
-        document.documentElement.appendChild(chipLegacy);
+        mount.appendChild(chip);
+        mount.appendChild(chipLegacy);
       }
 
       // 2) Ask Meta AI entry
@@ -826,7 +877,7 @@ enum InstagramAIContentHide {
       } else {
         entry.style.cssText +=
           'position:fixed;z-index:2147483646;right:12px;top:96px;';
-        document.documentElement.appendChild(entry);
+        mount.appendChild(entry);
       }
 
       // 3) AI stickers control
@@ -841,7 +892,7 @@ enum InstagramAIContentHide {
       else {
         sticker.style.cssText +=
           'position:fixed;z-index:2147483646;left:12px;top:140px;';
-        document.documentElement.appendChild(sticker);
+        mount.appendChild(sticker);
       }
 
       // 4) Floating Meta AI search / chrome (when not in an article context)
@@ -857,7 +908,7 @@ enum InstagramAIContentHide {
           'padding:10px 12px;border-radius:10px;border:0;background:#1a1a1a;color:#fff;' +
           'font:500 14px/1.2 -apple-system,sans-serif;'
       );
-      document.documentElement.appendChild(search);
+      mount.appendChild(search);
 
       // 5) Explore-style tile with Made with AI label
       var tile = plant(
@@ -872,7 +923,7 @@ enum InstagramAIContentHide {
       tileLabel.setAttribute('data-msa-ai-sim', '1');
       tileLabel.textContent = 'Made with AI';
       tile.appendChild(tileLabel);
-      document.documentElement.appendChild(tile);
+      mount.appendChild(tile);
 
       // 6) Story-ish AI sticker surface
       var story = plant(
@@ -887,7 +938,7 @@ enum InstagramAIContentHide {
       storySticker.setAttribute('data-msa-ai-sim', '1');
       storySticker.textContent = 'AI sticker';
       story.appendChild(storySticker);
-      document.documentElement.appendChild(story);
+      mount.appendChild(story);
 
       // When hide is on, collapse immediately (SocialLite-style: no flash of AI chrome).
       // Still schedule a reinforce pass for late layout.
