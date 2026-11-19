@@ -934,9 +934,11 @@ final class MindfullySocialUITests: XCTestCase {
 
     @MainActor
     private func waitForBrowser(in app: XCUIApplication, timeout: TimeInterval = 25) {
-        let web = app.otherElements["browserWebView"]
+        let namedWeb = app.webViews["browserWebView"]
+        let otherWeb = app.otherElements["browserWebView"]
         let tip = app.staticTexts["browserSwipeTip"]
-        let ready = web.waitForExistence(timeout: timeout)
+        let ready = namedWeb.waitForExistence(timeout: timeout)
+            || otherWeb.waitForExistence(timeout: 2)
             || tip.waitForExistence(timeout: 2)
             || app.webViews.firstMatch.waitForExistence(timeout: 5)
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
