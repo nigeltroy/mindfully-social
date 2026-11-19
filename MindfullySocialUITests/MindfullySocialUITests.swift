@@ -992,9 +992,10 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 12)
     }
 
-    /// MSA-29: hide Meta AI / Made-with-AI chrome. Visits @kumarmethod and @techroastshow
-    /// (Nigel: their posts include AI content examples). Before = hide off; after = hide on
-    /// (+ SimulateAIContent mechanism markers). Dumps via `-DumpIGAI`.
+    /// MSA-31 (extends MSA-29): stronger Meta AI / Made-with-AI / AI sticker hide.
+    /// Visits @kumarmethod and @techroastshow (organic + `-SimulateAIContent`).
+    /// Before = hide off + simulate markers visible; after = hide on (whole card).
+    /// Dumps via `-DumpIGAI` (scriptCanary `aihide-v3`).
     @MainActor
     func testInstagramAIContentHideProof() throws {
         let app = XCUIApplication()
@@ -1022,8 +1023,12 @@ final class MindfullySocialUITests: XCTestCase {
             dismissIGAlerts(in: app)
         }
 
-        // --- BEFORE: AI hide disabled on @kumarmethod ---
-        openInstagramProfile("/kumarmethod/", extraArgs: ["-DisableAIHide", "-DumpIGAI"])
+        // --- BEFORE: AI hide disabled + simulate on @kumarmethod ---
+        openInstagramProfile(
+            "/kumarmethod/",
+            extraArgs: ["-DisableAIHide", "-DumpIGAI", "-SimulateAIContent"]
+        )
+        Thread.sleep(forTimeInterval: 3)
         attach("ai-hide-before-kumarmethod-top")
 
         for _ in 0..<5 {
@@ -1054,7 +1059,25 @@ final class MindfullySocialUITests: XCTestCase {
         app.terminate()
         Thread.sleep(forTimeInterval: 2)
 
-        // --- AFTER: @techroastshow profile (second AI-content source) ---
+        // --- BEFORE: @techroastshow with markers visible (hide off) ---
+        openInstagramProfile(
+            "/techroastshow/",
+            extraArgs: ["-DisableAIHide", "-DumpIGAI", "-SimulateAIContent"]
+        )
+        Thread.sleep(forTimeInterval: 3)
+        attach("ai-hide-before-techroastshow-top")
+
+        for _ in 0..<4 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        dismissIGAlerts(in: app)
+        attach("ai-hide-before-techroastshow-scroll")
+
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+
+        // --- AFTER: @techroastshow hide on (whole-card + chrome) ---
         openInstagramProfile("/techroastshow/", extraArgs: ["-DumpIGAI", "-SimulateAIContent"])
         Thread.sleep(forTimeInterval: 5)
         attach("ai-hide-after-techroastshow-top")

@@ -125,7 +125,7 @@ final class BrowserModel: ObservableObject {
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
     /// Injects MSA-16 Reels-nav, MSA-18 feed-ad hide, MSA-19/22 Explore scripts,
     /// MSA-21 app-promo hide, MSA-23 Stories sponsored-ad auto-skip,
-    /// MSA-29 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
+    /// MSA-29/31 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -435,7 +435,7 @@ final class BrowserModel: ObservableObject {
     /// Tart proof helpers:
     /// `-DisableAIHide` → leave Meta AI / Made-with-AI chrome visible for before shots
     /// `-DumpIGAI` → write Documents/msa-ai-hide-dump-*.json periodically
-    /// `-SimulateAIContent` → plant Made with AI + Ask Meta AI markers for mechanism proof
+    /// `-SimulateAIContent` → plant Made with AI / Ask Meta AI / stickers / explore+story markers
     func startAIHideProbeIfRequested() {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-DumpIGAI") || args.contains("-DisableAIHide") || args.contains("-SimulateAIContent") else {
