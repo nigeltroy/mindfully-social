@@ -33,6 +33,8 @@ final class BrowserModel: ObservableObject {
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         // iOS WKWebView defaults allowsInlineMediaPlayback=false, which forces HTML5
         // video into the system fullscreen player when it autoplays (in-feed reels).
+        // Scripts are added in installSiteTweaks (post-create) — same path that
+        // works on FEA for MSA-30. Pre-create install left dumps *_missing here.
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
         let wv = WKWebView(frame: .zero, configuration: config)
@@ -127,14 +129,14 @@ final class BrowserModel: ObservableObject {
         }
     }
 
-    /// Site-specific WKUserScripts (Instagram). Safe once before load.
+    /// Site-specific WKUserScripts (Instagram). Safe once before load (post-create).
     /// Injects MSA-32 stable cover first, then MSA-16 Reels-nav, MSA-18 feed-ad hide,
     /// MSA-19/22 Explore scripts, MSA-21/32 app-promo hide, MSA-23 Stories sponsored-ad
     /// auto-skip, MSA-29/31 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
+    /// forMainFrameOnly true is more reliable for document-start canaries on Tart/iOS 27.2.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
-
         guard siteID == "instagram" else { return }
 
         let sources = [
@@ -151,7 +153,7 @@ final class BrowserModel: ObservableObject {
             let script = WKUserScript(
                 source: source,
                 injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
+                forMainFrameOnly: true
             )
             webView.configuration.userContentController.addUserScript(script)
         }
@@ -176,10 +178,10 @@ final class BrowserModel: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         stableCoverPollTimer = timer
-        // Soft cap: only used after JS reports ready. Empty IG must not flash white
-        // (chaos BUG-1) — JS keeps its cover; native waits longer for settle.
+        // Soft cap only reveals when JS reports ready (hasRealContent). Never drop
+        // into empty white (chaos BUG-1) — keep native cover if feed never painted.
         DispatchQueue.main.asyncAfter(deadline: .now() + 16) { [weak self] in
-            self?.revealStableCoverIfNeeded()
+            self?.pollStableCoverReady()
         }
     }
 
@@ -189,10 +191,7 @@ final class BrowserModel: ObservableObject {
             stableCoverPollTimer = nil
             return
         }
-        if let started = stableCoverStartedAt, Date().timeIntervalSince(started) > 16 {
-            revealStableCoverIfNeeded()
-            return
-        }
+        // Never time out into blank white — only reveal when JS cover reports ready.
         webView.evaluateJavaScript(InstagramStableCover.isReadyScript) { [weak self] result, _ in
             Task { @MainActor in
                 if let ready = result as? Bool, ready {

@@ -5,6 +5,8 @@ import Foundation
 /// Chaos BUG-1: first paint must not be empty white (grabber-only sheet).
 enum InstagramStableCover {
     /// Injected first at document-start so the page never flashes unstable chrome.
+    /// Keep this script light at document-start: heavy DOM work is deferred.
+    /// (A prior version hung/blanked WK on Tart/iOS 27.2 when it ran fully sync.)
     static let userScriptSource: String = #"""
 (function () {
   if (window.__msaStableCoverInstalled) return;
@@ -12,7 +14,6 @@ enum InstagramStableCover {
 
   var COVER_ID = 'msa-stable-cover';
   var STYLE_ID = 'msa-stable-cover-style';
-  // Soft dark gray ≈ Color(white: 0.11)
   var COVER_BG = '#1c1c1c';
   var QUIET_MS = 520;
   var MIN_MS = 480;
@@ -24,6 +25,7 @@ enum InstagramStableCover {
   var revealReason = null;
   var pollTimer = null;
   var mo = null;
+  var started = false;
 
   function paintShellDark() {
     try {
@@ -40,52 +42,63 @@ enum InstagramStableCover {
   }
 
   function ensureStyle() {
-    var style = document.getElementById(STYLE_ID);
-    if (!style) {
-      style = document.createElement('style');
-      style.id = STYLE_ID;
-      (document.documentElement || document.head || document.body).appendChild(style);
-    }
-    style.textContent = [
-      'html, body {',
-      '  background: ' + COVER_BG + ' !important;',
-      '  background-color: ' + COVER_BG + ' !important;',
-      '}',
-      '#' + COVER_ID + ' {',
-      '  position: fixed !important;',
-      '  inset: 0 !important;',
-      '  width: 100vw !important;',
-      '  height: 100vh !important;',
-      '  z-index: 2147483646 !important;',
-      '  background: ' + COVER_BG + ' !important;',
-      '  opacity: 1 !important;',
-      '  pointer-events: none !important;',
-      '  transition: opacity 0.28s ease-out !important;',
-      '}',
-      '#' + COVER_ID + '[data-msa-revealing="1"] {',
-      '  opacity: 0 !important;',
-      '}'
-    ].join('\n');
+    try {
+      var style = document.getElementById(STYLE_ID);
+      if (!style) {
+        style = document.createElement('style');
+        style.id = STYLE_ID;
+        var parent = document.head || document.documentElement || document.body;
+        if (!parent) return;
+        parent.appendChild(style);
+      }
+      style.textContent = [
+        'html, body {',
+        '  background: ' + COVER_BG + ' !important;',
+        '  background-color: ' + COVER_BG + ' !important;',
+        '}',
+        '#' + COVER_ID + ' {',
+        '  position: fixed !important;',
+        '  inset: 0 !important;',
+        '  width: 100% !important;',
+        '  height: 100% !important;',
+        '  z-index: 2147483646 !important;',
+        '  background: ' + COVER_BG + ' !important;',
+        '  opacity: 1 !important;',
+        '  pointer-events: none !important;',
+        '  transition: opacity 0.28s ease-out !important;',
+        '}',
+        '#' + COVER_ID + '[data-msa-revealing="1"] {',
+        '  opacity: 0 !important;',
+        '}'
+      ].join('\n');
+    } catch (e) {}
   }
 
   function ensureCover() {
     if (!enabled || revealed) return;
-    paintShellDark();
-    ensureStyle();
-    var el = document.getElementById(COVER_ID);
-    if (el) return el;
-    el = document.createElement('div');
-    el.id = COVER_ID;
-    el.setAttribute('data-msa-stable-cover', '1');
-    el.setAttribute('aria-hidden', 'true');
-    var root = document.documentElement || document.body;
-    if (root) root.appendChild(el);
-    return el;
+    try {
+      paintShellDark();
+      ensureStyle();
+      var el = document.getElementById(COVER_ID);
+      if (el) return el;
+      var parent = document.documentElement || document.body;
+      if (!parent) return null;
+      el = document.createElement('div');
+      el.id = COVER_ID;
+      el.setAttribute('data-msa-stable-cover', '1');
+      el.setAttribute('aria-hidden', 'true');
+      parent.appendChild(el);
+      return el;
+    } catch (e) {
+      return null;
+    }
   }
 
   function removeCoverNow() {
-    var el = document.getElementById(COVER_ID);
-    if (el && el.parentNode) el.parentNode.removeChild(el);
+    try {
+      var el = document.getElementById(COVER_ID);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    } catch (e) {}
   }
 
   function visibleRect(el) {
@@ -103,11 +116,12 @@ enum InstagramStableCover {
   function hasRealContent() {
     try {
       var articles = document.querySelectorAll('article');
-      for (var i = 0; i < articles.length; i++) {
+      var i;
+      for (i = 0; i < articles.length; i++) {
         var ar = visibleRect(articles[i]);
         if (ar && ar.height > 120 && ar.width > window.innerWidth * 0.5) return true;
       }
-      var media = document.querySelectorAll('img, video, canvas');
+      var media = document.querySelectorAll('img, video');
       var mediaHits = 0;
       for (var m = 0; m < media.length && mediaHits < 3; m++) {
         var mr = visibleRect(media[m]);
@@ -115,7 +129,6 @@ enum InstagramStableCover {
       }
       if (mediaHits >= 2) return true;
 
-      // Bottom nav with real tab links painted near the bottom.
       var home = document.querySelector('a[href="/"]');
       var explore = document.querySelector('a[href="/explore/"]');
       if (home && explore) {
@@ -127,8 +140,7 @@ enum InstagramStableCover {
           hr.top > window.innerHeight - 120 &&
           er.top > window.innerHeight - 120
         ) {
-          // Still require some main content above nav (not blank).
-          var main = document.querySelector('main, [role="main"], section');
+          var main = document.querySelector('main, [role="main"]');
           if (main) {
             var mainR = visibleRect(main);
             if (mainR && mainR.height > 160) return true;
@@ -152,7 +164,6 @@ enum InstagramStableCover {
         return true;
       }
     } catch (e) {}
-    // Promo script not ready yet — keep cover until it is, unless timed out.
     return false;
   }
 
@@ -189,23 +200,24 @@ enum InstagramStableCover {
   }
 
   function checkReady() {
-    if (!enabled) {
-      reveal('disabled');
-      return;
-    }
-    if (revealed) return;
-    ensureCover();
-    if (timedOut()) {
-      // Never drop into blank white — keep soft-dark cover if feed never painted.
-      if (hasRealContent() && promoLooksClear()) reveal('timeout');
-      else ensureCover();
-      return;
-    }
-    if (!minElapsed()) return;
-    if (!hasRealContent()) return;
-    if (!promoLooksClear()) return;
-    if (!quietLongEnough()) return;
-    reveal('stable');
+    try {
+      if (!enabled) {
+        reveal('disabled');
+        return;
+      }
+      if (revealed) return;
+      ensureCover();
+      if (timedOut()) {
+        if (hasRealContent() && promoLooksClear()) reveal('timeout');
+        else ensureCover();
+        return;
+      }
+      if (!minElapsed()) return;
+      if (!hasRealContent()) return;
+      if (!promoLooksClear()) return;
+      if (!quietLongEnough()) return;
+      reveal('stable');
+    } catch (e) {}
   }
 
   function bumpMutation() {
@@ -215,6 +227,7 @@ enum InstagramStableCover {
 
   function startObserver() {
     try {
+      if (mo) return;
       mo = new MutationObserver(function () {
         bumpMutation();
       });
@@ -223,8 +236,8 @@ enum InstagramStableCover {
         mo.observe(target, {
           childList: true,
           subtree: true,
-          attributes: true,
-          characterData: true
+          attributes: false,
+          characterData: false
         });
       }
     } catch (e) {}
@@ -257,37 +270,34 @@ enum InstagramStableCover {
         hasCover: !!document.getElementById(COVER_ID),
         hasRealContent: hasRealContent(),
         promoClear: promoLooksClear(),
-        scriptCanary: 'stablecover-v2',
+        scriptCanary: 'stablecover-v3',
         path: location.pathname
       };
     }
   };
 
-  paintShellDark();
-  ensureCover();
-  startObserver();
-  pollTimer = setInterval(checkReady, 80);
-  // Kick early promo scans so cover can clear sooner.
-  for (var d = 0; d < 10; d++) {
-    (function (delay) {
-      setTimeout(function () {
-        try {
-          if (window.__msaAppPromo && window.__msaAppPromo.scanNow) {
-            window.__msaAppPromo.scanNow();
-          }
-        } catch (e) {}
-        checkReady();
-      }, 40 + delay * 100);
-    })(d);
+  function boot() {
+    if (started) return;
+    started = true;
+    try {
+      paintShellDark();
+      ensureCover();
+      startObserver();
+      if (!pollTimer) pollTimer = setInterval(checkReady, 120);
+      checkReady();
+    } catch (e) {}
   }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  // Defer heavy work: sync document-start work blanked WK on Tart/iOS 27.2.
+  try {
     paintShellDark();
-    bumpMutation();
-    checkReady();
-  });
+  } catch (e0) {}
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    setTimeout(boot, 0);
+  }
   window.addEventListener('load', function () {
-    paintShellDark();
     bumpMutation();
     checkReady();
   });
@@ -309,7 +319,7 @@ enum InstagramStableCover {
 """#
 
     /// True only when JS cover has revealed. Missing install → false so native
-    /// cover stays up (chaos BUG-1). Native 10s hard-cap still prevents a stuck UI.
+    /// cover stays up (chaos BUG-1).
     static let isReadyScript: String = #"""
 (function () {
   try {
