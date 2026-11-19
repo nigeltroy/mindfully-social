@@ -1122,13 +1122,16 @@ final class MindfullySocialUITests: XCTestCase {
 
     @MainActor
     private func waitForBrowser(in app: XCUIApplication, timeout: TimeInterval = 25) {
-        // Prefer named WKWebView query (MSA-28); fall back to optional helpers.
-        let namedWeb = app.webViews["browserWebView"]
+        // Prefer Other/identifier (SwiftUI WKWebView often not AX WebView); then tip / any webView.
+        // Avoid long `webViews["browserWebView"]` waits — they hang AX on iOS 27 sim.
         let otherWeb = app.otherElements["browserWebView"]
+        if otherWeb.waitForExistence(timeout: timeout) { return }
         let tip = app.staticTexts["browserSwipeTip"]
-        let ready = namedWeb.waitForExistence(timeout: timeout)
-            || otherWeb.waitForExistence(timeout: 2)
-            || tip.waitForExistence(timeout: 2)
+        if tip.waitForExistence(timeout: 2) { return }
+        let anyWeb = app.webViews.firstMatch
+        if anyWeb.waitForExistence(timeout: 5) { return }
+        let namedWeb = app.webViews["browserWebView"]
+        let ready = namedWeb.waitForExistence(timeout: 3)
             || waitForBrowserOptional(in: app, timeout: 5)
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
     }

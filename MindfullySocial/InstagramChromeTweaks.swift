@@ -4,14 +4,14 @@ import Foundation
 /// redistributes the remaining icons evenly. Re-applies after SPA updates.
 ///
 /// Critical: hide **Reels only**. Never hide Direct/Messages (`/direct`).
-/// MSA-34 / chaos BUG-2: `reels-nav-v3` — deeper label walk + tab classifier
-/// so the clapperboard tab dies even when aria/href are nested oddly.
+/// MSA-34 / chaos BUG-2: `reels-nav-v4` — geometry-first bottom row (div chrome
+/// without aria/href), richer dump probe, position fallback for 4-tab layout.
 enum InstagramChromeTweaks {
     static let userScriptSource: String = #"""
 (function () {
-  if (window.__msaReelsInstalled && window.__msaReelsCanary === 'reels-nav-v3') return;
+  if (window.__msaReelsInstalled && window.__msaReelsCanary === 'reels-nav-v4') return;
   window.__msaReelsInstalled = true;
-  window.__msaReelsCanary = 'reels-nav-v3';
+  window.__msaReelsCanary = 'reels-nav-v4';
 
   var STYLE_ID = 'msa-hide-reels-style';
 
@@ -76,7 +76,7 @@ enum InstagramChromeTweaks {
   function isVisible(el) {
     try {
       var r = el.getBoundingClientRect();
-      return r.width >= 6 && r.height >= 6 && r.bottom > 0 && r.top < window.innerHeight + 2;
+      return r.width >= 4 && r.height >= 4 && r.bottom > 0 && r.top < window.innerHeight + 4;
     } catch (e) { return false; }
   }
 
@@ -107,10 +107,12 @@ enum InstagramChromeTweaks {
     }
     try { push(el.getAttribute('aria-label')); } catch (e) {}
     try { push(el.getAttribute('href')); } catch (e2) {}
+    try { push(el.getAttribute('title')); } catch (e2b) {}
     try {
-      var nodes = el.querySelectorAll ? el.querySelectorAll('[aria-label], title, svg') : [];
-      for (var i = 0; i < nodes.length && i < 20; i++) {
+      var nodes = el.querySelectorAll ? el.querySelectorAll('[aria-label], title, svg, img') : [];
+      for (var i = 0; i < nodes.length && i < 30; i++) {
         push(nodes[i].getAttribute && nodes[i].getAttribute('aria-label'));
+        push(nodes[i].getAttribute && nodes[i].getAttribute('alt'));
         if ((nodes[i].tagName || '').toLowerCase() === 'title') push(nodes[i].textContent);
         try {
           var t = nodes[i].querySelector && nodes[i].querySelector('title');
@@ -121,13 +123,13 @@ enum InstagramChromeTweaks {
     return parts.join(' ').toLowerCase();
   }
 
+  // Looser than v3: iPhone 17 home-indicator chrome + IG fixed bar sit mid-low.
   function inBottomBand(el) {
     try {
       var r = el.getBoundingClientRect();
-      if (r.width < 24 || r.height < 24) return false;
-      // Bottom ~28% — iPhone home-indicator chrome sits lower than older cuts.
-      if (r.top < window.innerHeight * 0.72) return false;
-      if (r.bottom < window.innerHeight - 160) return false;
+      if (r.width < 16 || r.height < 16) return false;
+      if (r.top < window.innerHeight * 0.55) return false;
+      if (r.bottom < window.innerHeight - 220) return false;
       return true;
     } catch (e) {
       return false;
@@ -144,8 +146,14 @@ enum InstagramChromeTweaks {
     if (p.indexOf('/shop') === 0 || /\bshop\b/.test(label) || /\bstore\b/.test(label) || /\bbag\b/.test(label)) return 'shop';
     if (/\b(create|new post|new reel)\b/.test(label)) return 'create';
     if (/\bprofile\b/.test(label) || /\baccount\b/.test(label)) return 'profile';
-    // Bare /username/ profile tab — single segment, not reserved.
     if (/^\/[a-z0-9._]+\/?$/i.test(p) && p.indexOf('/reels') !== 0) return 'profile';
+    // Clapper SVG often has a play triangle path and a square/rect outline.
+    try {
+      var html = (el.innerHTML || '').toLowerCase();
+      if (html.indexOf('reels') !== -1) return 'reels';
+      // IG Reels glyph: nested rect + polygon/play-ish path near bottom chrome.
+      if (el.querySelector && el.querySelector('svg') && /(clapper|reel)/i.test(html)) return 'reels';
+    } catch (e5) {}
     return 'unknown';
   }
 
@@ -161,6 +169,120 @@ enum InstagramChromeTweaks {
       node = node.parentElement;
     }
     return node;
+  }
+
+  function rectOf(el) {
+    try {
+      var br = el.getBoundingClientRect();
+      return { w: Math.round(br.width), h: Math.round(br.height), top: Math.round(br.top), left: Math.round(br.left), bottom: Math.round(br.bottom) };
+    } catch (e) {
+      return { w: 0, h: 0, top: 0, left: 0, bottom: 0 };
+    }
+  }
+
+  function looksInteractive(el) {
+    if (!el || !el.tagName) return false;
+    var tag = el.tagName.toLowerCase();
+    if (tag === 'a' || tag === 'button') return true;
+    var role = (el.getAttribute('role') || '').toLowerCase();
+    if (role === 'link' || role === 'tab' || role === 'button') return true;
+    if (el.hasAttribute('href') || el.hasAttribute('tabindex')) return true;
+    return false;
+  }
+
+  function collectBottomCandidates() {
+    return Array.prototype.slice.call(document.querySelectorAll(
+      'a[href], [role="link"], [role="tab"], [role="button"], button, div[aria-label], span[aria-label], svg[aria-label], div[tabindex], span[tabindex]'
+    ));
+  }
+
+  // Geometry-first: find a horizontal row of similar-sized slots near the bottom,
+  // even when IG uses bare divs with no aria/href (current 4-tab chrome).
+  function findBottomNavByGeometry() {
+    var vh = window.innerHeight || 0;
+    var vw = window.innerWidth || 0;
+    if (vh < 200 || vw < 200) return null;
+
+    var all = document.querySelectorAll('div, a, span, button, nav, section');
+    var slots = [];
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (!el || !el.getBoundingClientRect) continue;
+      var r = el.getBoundingClientRect();
+      if (r.width < 36 || r.width > vw * 0.34) continue;
+      if (r.height < 28 || r.height > 96) continue;
+      if (r.top < vh * 0.62) continue;
+      if (r.bottom < vh - 200) continue;
+      if (r.left < -4 || r.right > vw + 4) continue;
+      // Prefer leaf-ish slots: few children, or wraps a single svg/a.
+      var childCount = el.children ? el.children.length : 0;
+      if (childCount > 6) continue;
+      slots.push({ el: el, r: r, midY: r.top + r.height / 2, midX: r.left + r.width / 2 });
+    }
+    if (slots.length < 3) return null;
+
+    // Cluster by midY
+    slots.sort(function (a, b) { return a.midY - b.midY || a.midX - b.midX; });
+    var bestGroup = [];
+    for (var s = 0; s < slots.length; s++) {
+      var seed = slots[s];
+      var group = [seed];
+      for (var t = 0; t < slots.length; t++) {
+        if (t === s) continue;
+        if (Math.abs(slots[t].midY - seed.midY) <= 18) group.push(slots[t]);
+      }
+      // Dedup overlapping / nested
+      group.sort(function (a, b) { return a.midX - b.midX; });
+      var dedup = [];
+      for (var g = 0; g < group.length; g++) {
+        var ok = true;
+        for (var d = 0; d < dedup.length; d++) {
+          if (Math.abs(group[g].midX - dedup[d].midX) < 20) {
+            // Keep the smaller (more leaf-like) node.
+            if (group[g].r.width * group[g].r.height < dedup[d].r.width * dedup[d].r.height) {
+              dedup[d] = group[g];
+            }
+            ok = false;
+            break;
+          }
+        }
+        if (ok) dedup.push(group[g]);
+      }
+      if (dedup.length >= 3 && dedup.length <= 6 && dedup.length > bestGroup.length) {
+        // Prefer the lowest row.
+        if (!bestGroup.length || seed.midY >= bestGroup[0].midY - 8) {
+          bestGroup = dedup;
+        }
+      }
+    }
+    if (bestGroup.length < 3) return null;
+
+    bestGroup.sort(function (a, b) { return a.midX - b.midX; });
+    // Climb to a common parent that owns these slots as descendants.
+    var container = bestGroup[0].el.parentElement;
+    var guard = 0;
+    while (container && container !== document.body && guard++ < 12) {
+      var owned = 0;
+      for (var b = 0; b < bestGroup.length; b++) {
+        if (container.contains(bestGroup[b].el)) owned++;
+      }
+      if (owned === bestGroup.length && container.children.length >= bestGroup.length && container.children.length <= 10) {
+        break;
+      }
+      container = container.parentElement;
+    }
+    if (!container) container = bestGroup[0].el.parentElement;
+
+    var tabs = bestGroup.map(function (x) {
+      // Prefer an interactive descendant if present.
+      var link = null;
+      if (looksInteractive(x.el)) link = x.el;
+      else if (x.el.querySelector) {
+        link = x.el.querySelector('a[href], [role="link"], [role="tab"], button, svg[aria-label]');
+      }
+      return link || x.el;
+    });
+    return { container: container, tabs: tabs, slots: bestGroup.map(function (x) { return x.el; }) };
   }
 
   function findBottomNavHome() {
@@ -184,15 +306,15 @@ enum InstagramChromeTweaks {
       for (var c = 0; c < el.children.length; c++) {
         var child = el.children[c];
         var link = null;
-        if (child.tagName === 'A' || child.getAttribute('role') === 'link' || child.getAttribute('role') === 'tab') {
+        if (looksInteractive(child)) {
           link = child;
         } else {
-          link = child.querySelector('a[href], [role="link"], [role="tab"]');
+          link = child.querySelector('a[href], [role="link"], [role="tab"], svg[aria-label]');
         }
         if (!link) continue;
         if (!inBottomBand(link) && !inBottomBand(child)) continue;
         var r = link.getBoundingClientRect();
-        if (r.width < 24 || r.height < 24) continue;
+        if (r.width < 16 || r.height < 16) continue;
         directTabs.push(link);
       }
       if (directTabs.length >= 3 && directTabs.length <= 7) {
@@ -223,12 +345,6 @@ enum InstagramChromeTweaks {
     }
   }
 
-  function collectBottomCandidates() {
-    return Array.prototype.slice.call(document.querySelectorAll(
-      'a[href], [role="link"], [role="tab"], [role="button"], button, div[aria-label], span[aria-label], svg[aria-label]'
-    ));
-  }
-
   function hideBottomReelsFallback() {
     var nodes = collectBottomCandidates();
     for (var i = 0; i < nodes.length; i++) {
@@ -237,6 +353,46 @@ enum InstagramChromeTweaks {
       if (!isReelsTabControl(a)) continue;
       markReelsSlot(a, null);
     }
+    // Exact /reels anchors anywhere in the lower third.
+    var anchors = document.querySelectorAll('a[href]');
+    for (var j = 0; j < anchors.length; j++) {
+      var link = anchors[j];
+      if (!isExactReelsPath(pathOf(link))) continue;
+      if (!isVisible(link)) continue;
+      var r = link.getBoundingClientRect();
+      if (r.top < window.innerHeight * 0.55) continue;
+      markReelsSlot(link, null);
+    }
+  }
+
+  function resolveKinds(tabs) {
+    var kinds = tabs.map(function (el) { return classifyTab(el); });
+    // Never overwrite a confident direct/messages classification — MSA-16/34
+    // must not hide Direct. Current IG 4-tab chrome is often
+    // Home / Explore / Messages / Profile (no Reels tab at all).
+    function canGuess(i) {
+      return kinds[i] === 'unknown';
+    }
+    if (tabs.length === 4) {
+      var hasReels = kinds.indexOf('reels') !== -1;
+      var hasDirect = kinds.indexOf('direct') !== -1;
+      if (!hasReels && !hasDirect) {
+        // Only guess Reels when slot 2 is unknown AND neighbors look like home/search + profile.
+        if (canGuess(2) &&
+            (kinds[0] === 'home' || canGuess(0)) &&
+            (kinds[1] === 'search' || canGuess(1)) &&
+            (kinds[3] === 'profile' || canGuess(3))) {
+          kinds[2] = 'reels';
+        }
+      }
+    }
+    // 5-tab classic: Home / Search / Reels / Shop-or-Create / Profile — index 2 only if unknown.
+    if (tabs.length === 5 && kinds.indexOf('reels') === -1) {
+      if (canGuess(2) && (kinds[0] === 'home' || canGuess(0)) && kinds.indexOf('direct') === -1) {
+        kinds[2] = 'reels';
+      }
+    }
+    return kinds;
   }
 
   function redistribute(container, keep) {
@@ -282,7 +438,7 @@ enum InstagramChromeTweaks {
       dismissBlockingTips();
 
       var home = findBottomNavHome();
-      var row = findNavRow(home);
+      var row = findNavRow(home) || findBottomNavByGeometry();
       if (!row) {
         hideBottomReelsFallback();
         return;
@@ -297,21 +453,36 @@ enum InstagramChromeTweaks {
       container.style.setProperty('grid-template-columns', 'none', 'important');
       container.style.setProperty('gap', '0', 'important');
 
-      var keep = [];
       var kids = Array.prototype.slice.call(container.children);
+      var tabEls = row.tabs || [];
+      var kinds = resolveKinds(tabEls);
+
+      // Mark reels via resolved kinds on discovered tabs.
+      for (var t = 0; t < tabEls.length; t++) {
+        if (kinds[t] === 'reels' && !isDirectPath(pathOf(tabEls[t]))) {
+          markReelsSlot(tabEls[t], container);
+        }
+      }
+
+      var keep = [];
       for (var j = 0; j < kids.length; j++) {
         var child = kids[j];
-        child.removeAttribute('data-msa-reels-target');
-        var link = child.tagName === 'A' || child.getAttribute('role') === 'link' || child.getAttribute('role') === 'tab'
+        if (child.getAttribute('data-msa-reels-target') === '1') continue;
+        if (!child.isConnected) continue;
+        var link = looksInteractive(child)
           ? child
-          : child.querySelector('a[href], [role="link"], [role="tab"], svg[aria-label]');
+          : (child.querySelector && child.querySelector('a[href], [role="link"], [role="tab"], svg[aria-label]'));
         var target = link || child;
         var kind = classifyTab(target);
+        // If this child contains a marked reels descendant, skip.
+        if (child.querySelector && child.querySelector('[data-msa-reels-target="1"]')) {
+          markReelsSlot(child, container);
+          continue;
+        }
         if (kind === 'reels' && !isDirectPath(pathOf(target))) {
           markReelsSlot(target, container);
           continue;
         }
-        // Nested SVG labeled Reels inside an otherwise-unknown slot.
         if (target.querySelector && target.querySelector('svg[aria-label*="Reel" i], [aria-label*="Reel" i]')) {
           var nestedLabel = tabLabel(target);
           if (/(^|\b)reels?\b/.test(nestedLabel) || isExactReelsPath(pathOf(target))) {
@@ -327,24 +498,46 @@ enum InstagramChromeTweaks {
     } catch (e) {}
   }
 
+  function rawBottomProbe() {
+    var vh = window.innerHeight || 0;
+    var out = [];
+    var nodes = document.querySelectorAll('a, button, [role="link"], [role="tab"], svg, div, span, nav');
+    for (var i = 0; i < nodes.length && out.length < 40; i++) {
+      var el = nodes[i];
+      var r = rectOf(el);
+      if (r.top < vh * 0.58) continue;
+      if (r.w < 8 || r.h < 8) continue;
+      if (r.w > (window.innerWidth || 0) * 0.9 && r.h > 120) continue;
+      out.push({
+        tag: el.tagName,
+        role: el.getAttribute('role') || '',
+        href: (el.getAttribute('href') || '').slice(0, 80),
+        path: pathOf(el),
+        aria: (el.getAttribute('aria-label') || '').slice(0, 60),
+        label: tabLabel(el).slice(0, 80),
+        kind: classifyTab(el),
+        rect: r,
+        kids: el.children ? el.children.length : 0
+      });
+    }
+    return out;
+  }
+
   function dumpNav() {
     var tabs = [];
     var home = findBottomNavHome();
-    var row = findNavRow(home);
+    var row = findNavRow(home) || findBottomNavByGeometry();
     var list = row ? row.tabs : [];
+    var kinds = list.length ? resolveKinds(list) : [];
     if (!list.length) {
       var nodes = collectBottomCandidates();
       for (var i = 0; i < nodes.length; i++) {
         if (isVisible(nodes[i]) && inBottomBand(nodes[i])) list.push(nodes[i]);
       }
+      kinds = list.length ? resolveKinds(list) : [];
     }
     for (var t = 0; t < list.length; t++) {
       var el = list[t];
-      var r = { w: 0, h: 0, top: 0, left: 0 };
-      try {
-        var br = el.getBoundingClientRect();
-        r = { w: Math.round(br.width), h: Math.round(br.height), top: Math.round(br.top), left: Math.round(br.left) };
-      } catch (e) {}
       tabs.push({
         tag: el.tagName,
         role: el.getAttribute('role') || '',
@@ -352,19 +545,35 @@ enum InstagramChromeTweaks {
         path: pathOf(el),
         aria: el.getAttribute('aria-label') || '',
         label: tabLabel(el).slice(0, 120),
-        kind: classifyTab(el),
+        kind: kinds[t] || classifyTab(el),
         marked: el.getAttribute('data-msa-reels-target') === '1' ||
           !!(el.closest && el.closest('[data-msa-reels-target="1"]')),
-        rect: r
+        rect: rectOf(el)
       });
     }
+    var reelsHrefs = [];
+    try {
+      var allA = document.querySelectorAll('a[href]');
+      for (var a = 0; a < allA.length && reelsHrefs.length < 12; a++) {
+        var p = pathOf(allA[a]);
+        if (p.indexOf('/reel') !== -1) {
+          reelsHrefs.push({ href: (allA[a].getAttribute('href') || '').slice(0, 100), path: p, rect: rectOf(allA[a]) });
+        }
+      }
+    } catch (e) {}
     return {
-      scriptCanary: 'reels-nav-v3',
+      scriptCanary: 'reels-nav-v4',
       path: location.pathname,
+      vh: window.innerHeight || 0,
+      vw: window.innerWidth || 0,
       bottomNav: !!document.querySelector('[data-msa-bottom-nav="1"]'),
+      hasStyle: !!document.getElementById(STYLE_ID),
       markedCount: document.querySelectorAll('[data-msa-reels-target="1"]').length,
       visibleReelsKind: tabs.filter(function (x) { return x.kind === 'reels' && !x.marked; }).length,
-      tabs: tabs
+      rowSource: row ? (home && findNavRow(home) ? 'home-walk' : 'geometry') : 'none',
+      tabs: tabs,
+      reelsHrefs: reelsHrefs,
+      rawBottom: rawBottomProbe()
     };
   }
 
@@ -400,7 +609,7 @@ enum InstagramChromeTweaks {
   setInterval(apply, 500);
 
   window.__msaReelsNav = {
-    scriptCanary: 'reels-nav-v3',
+    scriptCanary: 'reels-nav-v4',
     apply: apply,
     dump: dumpNav
   };
