@@ -375,16 +375,20 @@ final class MindfullySocialUITests: XCTestCase {
     /// can hang 60s+ on AX IPC timeout (MSA-30 fail mode) and wedge the whole UITest.
     @MainActor
     private func dismissIGAlerts(in app: XCUIApplication) {
+        // Prefer .exists (no AX wait) — waitForExistence can hang when the
+        // WKWebView accessibility server wedges under multi-sim Tart load.
+        // Prefer alert-scoped Not Now; avoid scanning the whole web tree.
         for _ in 0..<3 {
             let alertOK = app.alerts.buttons["OK"]
             if alertOK.exists {
                 alertOK.tap()
+                Thread.sleep(forTimeInterval: 0.2)
                 continue
             }
-            // Prefer alert-scoped Not Now; avoid scanning the whole web tree.
             let alertNotNow = app.alerts.buttons["Not Now"]
             if alertNotNow.exists {
                 alertNotNow.tap()
+                Thread.sleep(forTimeInterval: 0.2)
                 continue
             }
             break
@@ -883,16 +887,15 @@ final class MindfullySocialUITests: XCTestCase {
         dismissIGAlerts(in: app)
         attach("msa32-before-promo-top")
 
-        for _ in 0..<3 {
+        for _ in 0..<2 {
             swipeFeedUp(in: app)
-            Thread.sleep(forTimeInterval: 1.0)
+            Thread.sleep(forTimeInterval: 0.8)
         }
-        Thread.sleep(forTimeInterval: 2)
         dismissIGAlerts(in: app)
         attach("msa32-before-promo-scroll")
 
         app.terminate()
-        Thread.sleep(forTimeInterval: 2)
+        Thread.sleep(forTimeInterval: 1.5)
 
         // --- AFTER: cover + strengthened promo hide ---
         app.launchArguments = [
@@ -902,31 +905,30 @@ final class MindfullySocialUITests: XCTestCase {
         ]
         app.launch()
         // Capture early cover if still up (may already have revealed on fast loads).
-        _ = waitForBrowserOptional(in: app, timeout: 25)
+        _ = waitForBrowserOptional(in: app, timeout: 20)
         Thread.sleep(forTimeInterval: 0.35)
         attach("msa32-after-cover-or-early")
         // Wait for cover to clear / feed to settle.
-        Thread.sleep(forTimeInterval: 10)
+        Thread.sleep(forTimeInterval: 8)
         dismissIGAlerts(in: app)
         attach("msa32-after-reveal-top")
 
-        for _ in 0..<5 {
+        for _ in 0..<4 {
             swipeFeedUp(in: app)
-            Thread.sleep(forTimeInterval: 1.0)
+            Thread.sleep(forTimeInterval: 0.8)
         }
-        Thread.sleep(forTimeInterval: 2)
         dismissIGAlerts(in: app)
         attach("msa32-after-reveal-scroll")
 
         let searchTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.37, dy: 0.93))
         searchTap.tap()
-        Thread.sleep(forTimeInterval: 5)
+        Thread.sleep(forTimeInterval: 4)
         dismissIGAlerts(in: app)
         attach("msa32-after-reveal-search")
 
         let homeTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.93))
         homeTap.tap()
-        Thread.sleep(forTimeInterval: 5)
+        Thread.sleep(forTimeInterval: 4)
         dismissIGAlerts(in: app)
         attach("msa32-after-reveal-home")
     }
