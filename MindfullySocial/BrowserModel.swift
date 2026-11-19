@@ -15,6 +15,10 @@ final class BrowserModel: ObservableObject {
     private var appPromoDumpTimer: Timer?
     private var aiHideDumpTimer: Timer?
     private var reelGuardDumpTimer: Timer?
+    /// MSA-30: last real tap on the WKWebView (gesture-gated reel opens).
+    private var lastTrustedInteractionAt: Date?
+    private var intentionalReelPath: String?
+    private var isBouncingReelURL = false
 
     init() {
         let config = WKWebViewConfiguration()
@@ -59,8 +63,63 @@ final class BrowserModel: ObservableObject {
                 if (self?.titleText.isEmpty ?? true) {
                     self?.titleText = webView.url?.host ?? ""
                 }
+                self?.enforceReelURLGuard(webView.url)
             }
         })
+    }
+
+    /// Called from WebView tap recognizer (cancelsTouchesInView=false).
+    func markTrustedInteraction() {
+        lastTrustedInteractionAt = Date()
+    }
+
+    private func hasRecentTrustedInteraction(within seconds: TimeInterval = 2.5) -> Bool {
+        guard let lastTrustedInteractionAt else { return false }
+        return Date().timeIntervalSince(lastTrustedInteractionAt) <= seconds
+    }
+
+    /// True for Reels tab and single-reel paths (not /reels/audio).
+    static func isInstagramReelPath(_ url: URL?) -> Bool {
+        guard let url else { return false }
+        let host = (url.host ?? "").lowercased()
+        guard host.contains("instagram.com") else { return false }
+        let path = url.path.lowercased()
+        if path == "/reels" || path == "/reels/" { return true }
+        if path.hasPrefix("/reel/") { return true }
+        if path.hasPrefix("/reels/") && !path.hasPrefix("/reels/audio") {
+            let rest = String(path.dropFirst("/reels/".count))
+                .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            return !rest.isEmpty && !rest.hasPrefix("audio")
+        }
+        return false
+    }
+
+    /// Belt-and-suspenders with JS reelguard: bounce unsolicited /reels landings.
+    private func enforceReelURLGuard(_ url: URL?) {
+        guard installedTweaksSiteID == "instagram" else { return }
+        guard Self.isInstagramReelPath(url) else {
+            intentionalReelPath = nil
+            return
+        }
+        let path = url?.path ?? ""
+        if hasRecentTrustedInteraction() {
+            intentionalReelPath = path
+            return
+        }
+        if let keep = intentionalReelPath, keep == path {
+            return
+        }
+        guard !isBouncingReelURL else { return }
+        isBouncingReelURL = true
+        NSLog("MSA-30: bouncing unsolicited reel URL %@", path)
+        if webView.canGoBack {
+            webView.goBack()
+        } else if let home = URL(string: "https://www.instagram.com/") {
+            webView.load(URLRequest(url: home))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+            self?.isBouncingReelURL = false
+        }
     }
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.

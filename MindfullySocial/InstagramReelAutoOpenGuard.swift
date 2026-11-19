@@ -251,7 +251,8 @@ enum InstagramReelAutoOpenGuard {
     });
   } catch (e3) {}
 
-  setInterval(apply, 1200);
+  // Dense path watch — Reels-tab SPA landings must bounce quickly.
+  setInterval(apply, 400);
   ['pushState', 'replaceState'].forEach(function () {});
   window.addEventListener('popstate', function () { setTimeout(apply, 0); });
   document.addEventListener('DOMContentLoaded', apply);
