@@ -425,7 +425,7 @@ enum InstagramAppPromoHide {
       style.id = STYLE_ID;
       (document.head || document.documentElement).appendChild(style);
     }
-    style.textContent = [
+    var parts = [
       '[' + MARK + '="1"] {',
       '  display: none !important;',
       '  visibility: hidden !important;',
@@ -444,9 +444,21 @@ enum InstagramAppPromoHide {
       '[' + MARK + '="1"] * {',
       '  display: none !important;',
       '}'
-      // NOTE: do not CSS-force div._acc8._abpk here — DisableAppPromoHide
-      // before-shots must be able to show the banner; JS collapse marks instead.
-    ].join('\n');
+    ];
+    // CSS-force known install row only while hide is enabled (before-shots need it off).
+    if (!(window.__msaAppPromo && window.__msaAppPromo.enabled === false)) {
+      parts.push(
+        'div._acc8._abpk, div._abpk._acc8 {',
+        '  display: none !important;',
+        '  visibility: hidden !important;',
+        '  height: 0 !important;',
+        '  max-height: 0 !important;',
+        '  opacity: 0 !important;',
+        '  pointer-events: none !important;',
+        '}'
+      );
+    }
+    style.textContent = parts.join('\n');
   }
 
   function readableLabel(el) {
@@ -1034,7 +1046,7 @@ enum InstagramAppPromoHide {
         markedReasons: reasons,
         visiblePromoText: livePromoLabels(),
         hitTestBottom: hitTestBottom(),
-        scriptCanary: 'apppromo-v14',
+        scriptCanary: 'apppromo-v15',
         path: location.pathname,
         hasStyle: !!document.getElementById(STYLE_ID)
       };
