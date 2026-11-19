@@ -1,7 +1,9 @@
 import Foundation
 
-/// MSA-30: stop Instagram in-feed reels from auto-opening fullscreen / reel viewer
-/// without a real user gesture. Intentional taps still open reels.
+/// MSA-30: stop Instagram from auto-landing on Reels tab (/reels) or opening a
+/// reel viewer / system fullscreen without a real user gesture.
+/// Intentional taps still open reels. Quality bar: SocialLite removes Reels
+/// surfaces entirely; we keep intentional open but block unsolicited entry.
 enum InstagramReelAutoOpenGuard {
     /// Injected at document-start alongside other Instagram user scripts.
     static let userScriptSource: String = #"""
@@ -43,7 +45,10 @@ enum InstagramReelAutoOpenGuard {
   });
 
   function pathLooksReel(path) {
-    var p = String(path || '').toLowerCase();
+    var p = String(path || '').toLowerCase().split('?')[0].split('#')[0];
+    if (!p) return false;
+    // Exact Reels tab (/reels, /reels/) — SocialLite-class surface; never auto-land.
+    if (p === '/reels' || p === '/reels/') return true;
     if (p.indexOf('/reel/') === 0) return true;
     if (p.indexOf('/reels/') === 0 && p.indexOf('/reels/audio') !== 0) {
       var rest = p.slice('/reels/'.length).replace(/\/$/, '');
@@ -57,7 +62,9 @@ enum InstagramReelAutoOpenGuard {
       var u = new URL(href, location.origin);
       return pathLooksReel(u.pathname || '');
     } catch (e) {
-      return /\/reel\//i.test(String(href || '')) || /\/reels\/(?!audio)/i.test(String(href || ''));
+      var s = String(href || '').toLowerCase();
+      if (s === '/reels' || s === '/reels/' || /(^|\\/)reels\\/?([?#]|$)/.test(s)) return true;
+      return /\\/reel\\//i.test(s) || /\\/reels\\/(?!audio)/i.test(s);
     }
   }
 
@@ -252,7 +259,7 @@ enum InstagramReelAutoOpenGuard {
 
   window.__msaReelGuard = {
     enabled: true,
-    scriptCanary: 'reelguard-v1',
+    scriptCanary: 'reelguard-v2',
     setEnabled: function (on) {
       enabled = !!on;
       this.enabled = enabled;
@@ -260,7 +267,7 @@ enum InstagramReelAutoOpenGuard {
     },
     dump: function () {
       return {
-        scriptCanary: 'reelguard-v1',
+        scriptCanary: 'reelguard-v2',
         enabled: enabled,
         path: location.pathname,
         href: location.href,
@@ -280,11 +287,11 @@ enum InstagramReelAutoOpenGuard {
         }).length
       };
     },
-    /// Mechanism proof: try to open a reel / enter fullscreen without a gesture.
+    /// Mechanism proof: try to open Reels tab / reel / fullscreen without a gesture.
     simulateAutoOpen: function () {
       var result = { clicked: false, fullscreen: false, pushState: false, blocked: false };
       try {
-        var a = document.querySelector('a[href*="/reel/"], a[href*="/reels/"]');
+        var a = document.querySelector('a[href="/reels/"], a[href="/reels"], a[href*="/reel/"]');
         if (a) {
           try {
             a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
@@ -293,7 +300,8 @@ enum InstagramReelAutoOpenGuard {
         }
       } catch (e2) {}
       try {
-        history.pushState(null, '', '/reel/msa30sim/');
+        // Prefer exact Reels-tab landing (the fail mode seen on Tart).
+        history.pushState(null, '', '/reels/');
         result.pushState = pathLooksReel(location.pathname);
       } catch (e3) {}
       try {
@@ -315,7 +323,7 @@ enum InstagramReelAutoOpenGuard {
       };
       result.path = location.pathname;
       note('simulate', JSON.stringify(result).slice(0, 120));
-      // Undo synthetic path if we landed on the sim reel without a gesture.
+      // Undo synthetic path if we landed on Reels without a gesture.
       try {
         if (pathLooksReel(location.pathname) && !hasTrustedGesture()) {
           history.replaceState(null, '', '/');

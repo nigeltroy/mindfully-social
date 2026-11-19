@@ -371,17 +371,20 @@ final class MindfullySocialUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: end)
     }
 
+    /// Soft dismiss — use instant `.exists` only. `waitForExistence` against WKWebView
+    /// can hang 60s+ on AX IPC timeout (MSA-30 fail mode) and wedge the whole UITest.
     @MainActor
     private func dismissIGAlerts(in app: XCUIApplication) {
-        for _ in 0..<4 {
-            let ok = app.alerts.buttons["OK"]
-            if ok.waitForExistence(timeout: 0.8) {
-                ok.tap()
+        for _ in 0..<3 {
+            let alertOK = app.alerts.buttons["OK"]
+            if alertOK.exists {
+                alertOK.tap()
                 continue
             }
-            let notNow = app.buttons["Not Now"]
-            if notNow.waitForExistence(timeout: 0.5) {
-                notNow.tap()
+            // Prefer alert-scoped Not Now; avoid scanning the whole web tree.
+            let alertNotNow = app.alerts.buttons["Not Now"]
+            if alertNotNow.exists {
+                alertNotNow.tap()
                 continue
             }
             break
@@ -954,21 +957,22 @@ final class MindfullySocialUITests: XCTestCase {
         ]
         app.launch()
         waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 10)
+        Thread.sleep(forTimeInterval: 12)
         dismissIGAlerts(in: app)
         attach("msa30-feed-idle-start")
 
-        // Idle scroll only — do not tap video/reel tiles.
-        for _ in 0..<8 {
+        // Idle scroll only — do not tap video/reel tiles. Soft-dismiss at most
+        // twice so AX cannot wedge mid-scroll (MSA-30 prior fail).
+        for i in 0..<8 {
             swipeFeedUp(in: app)
             Thread.sleep(forTimeInterval: 1.4)
-            dismissIGAlerts(in: app)
+            if i == 0 || i == 4 { dismissIGAlerts(in: app) }
         }
         Thread.sleep(forTimeInterval: 4)
         attach("msa30-feed-after-idle-scroll")
 
         // Hold so simulate + dump timers can fire while still on the feed.
-        Thread.sleep(forTimeInterval: 8)
+        Thread.sleep(forTimeInterval: 10)
         attach("msa30-feed-after-simulate-window")
 
         // Intentional tap on mid feed (user gesture) — reel open is allowed.
@@ -985,7 +989,7 @@ final class MindfullySocialUITests: XCTestCase {
         attach("msa30-after-close-attempt")
 
         // Keep process alive so -DumpIGReelGuard timers flush.
-        Thread.sleep(forTimeInterval: 10)
+        Thread.sleep(forTimeInterval: 12)
     }
 
     /// MSA-29: hide Meta AI / Made-with-AI chrome. Visits @kumarmethod and @techroastshow
