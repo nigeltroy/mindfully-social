@@ -14,6 +14,7 @@ final class BrowserModel: ObservableObject {
     private var feedDumpTimer: Timer?
     private var appPromoDumpTimer: Timer?
     private var aiHideDumpTimer: Timer?
+    private var reelGuardDumpTimer: Timer?
 
     init() {
         let config = WKWebViewConfiguration()
@@ -21,6 +22,10 @@ final class BrowserModel: ObservableObject {
         // Do not use WKWebsiteDataStore.nonPersistent().
         config.websiteDataStore = .default()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
+        // iOS WKWebView defaults allowsInlineMediaPlayback=false, which forces HTML5
+        // video into the system fullscreen player when it autoplays (in-feed reels).
+        config.allowsInlineMediaPlayback = true
+        config.mediaTypesRequiringUserActionForPlayback = []
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.allowsBackForwardNavigationGestures = true
         wv.scrollView.contentInsetAdjustmentBehavior = .never
@@ -61,7 +66,7 @@ final class BrowserModel: ObservableObject {
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
     /// Injects MSA-16 Reels-nav, MSA-18 feed-ad hide, MSA-19/22 Explore scripts,
     /// MSA-21 app-promo hide, MSA-23 Stories sponsored-ad auto-skip,
-    /// and MSA-29 Meta AI / AI-content hide.
+    /// MSA-29 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -74,7 +79,8 @@ final class BrowserModel: ObservableObject {
             InstagramSearchReelsHide.searchReelsHideUserScriptSource,
             InstagramAppPromoHide.userScriptSource,
             InstagramStoryAdSkip.userScriptSource,
-            InstagramAIContentHide.userScriptSource
+            InstagramAIContentHide.userScriptSource,
+            InstagramReelAutoOpenGuard.userScriptSource
         ]
         for source in sources {
             let script = WKUserScript(
@@ -428,6 +434,72 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-ai-hide-dump-\(suffix).json")
             try? body.write(to: url, atomically: true, encoding: .utf8)
             NSLog("MSA AIHideDump: wrote %@", url.lastPathComponent)
+        }
+    }
+
+    /// Tart proof helpers:
+    /// `-DumpIGReelGuard` → Documents/msa-reel-guard-dump-*.json while scrolling feed
+    /// `-DisableReelGuard` → leave auto-open guard off for before shots
+    /// `-SimulateReelAutoOpen` → plant synthetic reel open / fullscreen attempts
+    func startReelGuardProbeIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGReelGuard")
+            || args.contains("-DisableReelGuard")
+            || args.contains("-SimulateReelAutoOpen")
+        else {
+            return
+        }
+        applyReelGuardLaunchFlagsIfNeeded()
+        guard args.contains("-DumpIGReelGuard") || args.contains("-SimulateReelAutoOpen") else { return }
+        reelGuardDumpTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.maybeSimulateReelAutoOpenIfRequested()
+                self?.writeReelGuardDump(suffix: "live")
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        reelGuardDumpTimer = timer
+        let delays: [Double] = [4, 8, 12, 18, 26, 36, 48, 70, 90, 110]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.applyReelGuardLaunchFlagsIfNeeded()
+                self?.maybeSimulateReelAutoOpenIfRequested()
+                self?.writeReelGuardDump(suffix: String(Int(delay)))
+            }
+        }
+    }
+
+    private func maybeSimulateReelAutoOpenIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-SimulateReelAutoOpen") else { return }
+        let js = #"(function(){try{if(window.__msaReelGuard&&window.__msaReelGuard.simulateAutoOpen){return JSON.stringify(window.__msaReelGuard.simulateAutoOpen());}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func applyReelGuardLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableReelGuard") else { return }
+        let js = #"(function(){try{if(window.__msaReelGuard&&window.__msaReelGuard.setEnabled){window.__msaReelGuard.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func writeReelGuardDump(suffix: String) {
+        webView.evaluateJavaScript(InstagramReelAutoOpenGuard.dumpScript) { result, error in
+            let body: String
+            if let error {
+                body = "{\"error\":\"evaluate\",\"detail\":\"\(error.localizedDescription)\"}\n"
+            } else if let text = result as? String {
+                body = text + "\n"
+            } else {
+                body = "{\"error\":\"non_string_result\"}\n"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-reel-guard-dump-\(suffix).json")
+            try? body.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("MSA ReelGuardDump: wrote %@", url.lastPathComponent)
         }
     }
 }

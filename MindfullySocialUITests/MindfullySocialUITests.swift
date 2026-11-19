@@ -933,6 +933,61 @@ final class MindfullySocialUITests: XCTestCase {
         add(afterHome)
     }
 
+    /// MSA-30: feed reels must not auto-open fullscreen / reel viewer without a tap.
+    /// Scrolls home feed idle (no media taps), runs `-SimulateReelAutoOpen` mechanism
+    /// attempts, then an intentional mid-feed tap (allowed). Dumps via `-DumpIGReelGuard`.
+    @MainActor
+    func testInstagramReelNoAutoFullscreen() throws {
+        let app = XCUIApplication()
+
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = name
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-DumpIGReelGuard",
+            "-SimulateReelAutoOpen"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 10)
+        dismissIGAlerts(in: app)
+        attach("msa30-feed-idle-start")
+
+        // Idle scroll only — do not tap video/reel tiles.
+        for _ in 0..<8 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.4)
+            dismissIGAlerts(in: app)
+        }
+        Thread.sleep(forTimeInterval: 4)
+        attach("msa30-feed-after-idle-scroll")
+
+        // Hold so simulate + dump timers can fire while still on the feed.
+        Thread.sleep(forTimeInterval: 8)
+        attach("msa30-feed-after-simulate-window")
+
+        // Intentional tap on mid feed (user gesture) — reel open is allowed.
+        let mid = app.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.48))
+        mid.tap()
+        Thread.sleep(forTimeInterval: 3.5)
+        dismissIGAlerts(in: app)
+        attach("msa30-after-intentional-tap")
+
+        // Return toward feed if a reel/viewer opened from the intentional tap.
+        let closeBand = app.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.08))
+        closeBand.tap()
+        Thread.sleep(forTimeInterval: 1.5)
+        attach("msa30-after-close-attempt")
+
+        // Keep process alive so -DumpIGReelGuard timers flush.
+        Thread.sleep(forTimeInterval: 10)
+    }
+
     /// MSA-29: hide Meta AI / Made-with-AI chrome. Visits @kumarmethod and @techroastshow
     /// (Nigel: their posts include AI content examples). Before = hide off; after = hide on
     /// (+ SimulateAIContent mechanism markers). Dumps via `-DumpIGAI`.

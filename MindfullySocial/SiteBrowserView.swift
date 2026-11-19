@@ -56,6 +56,7 @@ struct SiteBrowserView: View {
             model.startAppPromoProbeIfRequested()
             model.startStoryAdSkipProbeIfRequested()
             model.startAIHideProbeIfRequested()
+            model.startReelGuardProbeIfRequested()
             UsageTimeStore.beginSession(for: site.id)
             model.load(url: resolveLaunchURL(for: site))
             model.startExploreDumpIfRequested()

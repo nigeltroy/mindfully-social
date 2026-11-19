@@ -48,8 +48,21 @@ enum InstagramStoryAdSkip {
     return false;
   }
 
+  function inReelViewer() {
+    var path = location.pathname || '';
+    if (/\/reel\//i.test(path)) return true;
+    if (/\/reels\//i.test(path) && !/\/reels\/audio/i.test(path) && path !== '/reels' && path !== '/reels/') {
+      return true;
+    }
+    return false;
+  }
+
   function inStoryViewer() {
     var path = location.pathname || '';
+    // Never treat reel / feed surfaces as Stories — MSA-30: false positives
+    // caused synthetic right-taps that opened fullscreen reel viewers.
+    if (inReelViewer()) return false;
+    if (path === '/' || path === '') return false;
     if (/\/stories\//i.test(path)) return true;
     // SPA may keep a modal story viewer without updating the path yet.
     var dialogs = document.querySelectorAll('[role="dialog"], section[aria-modal="true"], div[aria-modal="true"]');
@@ -61,18 +74,9 @@ enum InstagramStoryAdSkip {
       } catch (e) { continue; }
       var html = '';
       try { html = (d.innerHTML || '').slice(0, 4000); } catch (e2) {}
+      // Require an explicit stories signal in modal HTML — chrome heuristics alone
+      // matched reel viewers and full-bleed feed shells.
       if (/\/stories\//i.test(html)) return true;
-      if (looksLikeStoryChrome(d)) return true;
-    }
-    // Fallback: some IG web builds render the viewer as a fixed full-bleed section.
-    var sections = document.querySelectorAll('section, main > div');
-    for (var s = 0; s < sections.length; s++) {
-      var el = sections[s];
-      try {
-        var br = el.getBoundingClientRect();
-        if (br.width < window.innerWidth * 0.85 || br.height < window.innerHeight * 0.75) continue;
-      } catch (e3) { continue; }
-      if (looksLikeStoryChrome(el)) return true;
     }
     return false;
   }
@@ -82,6 +86,17 @@ enum InstagramStoryAdSkip {
     if (/\/stories\//i.test(path)) {
       var dialog = document.querySelector('[role="dialog"], section[aria-modal="true"], div[aria-modal="true"]');
       if (dialog) return dialog;
+      // Prefer the largest modal-ish section over document.body so advance taps
+      // cannot hit the home feed behind a partial overlay.
+      var sections = document.querySelectorAll('section, main');
+      for (var s = 0; s < sections.length; s++) {
+        try {
+          var br = sections[s].getBoundingClientRect();
+          if (br.width >= window.innerWidth * 0.85 && br.height >= window.innerHeight * 0.75) {
+            return sections[s];
+          }
+        } catch (e0) {}
+      }
       return document.body;
     }
     var dialogs = document.querySelectorAll('[role="dialog"], section[aria-modal="true"], div[aria-modal="true"]');
@@ -89,10 +104,15 @@ enum InstagramStoryAdSkip {
       var d = dialogs[i];
       try {
         var r = d.getBoundingClientRect();
-        if (r.width >= window.innerWidth * 0.55 && r.height >= window.innerHeight * 0.55) return d;
+        if (r.width >= window.innerWidth * 0.55 && r.height >= window.innerHeight * 0.55) {
+          var html = '';
+          try { html = (d.innerHTML || '').slice(0, 4000); } catch (e1) {}
+          if (/\/stories\//i.test(html) || looksLikeStoryChrome(d)) return d;
+        }
       } catch (e) {}
     }
-    return document.body;
+    // Do not fall back to document.body — tapping body opened in-feed reels (MSA-30).
+    return null;
   }
 
   function exactAdLabel(raw) {
@@ -104,6 +124,15 @@ enum InstagramStoryAdSkip {
     return null;
   }
 
+  function isFeedHidden(el) {
+    var n = el;
+    while (n && n !== document.body) {
+      if (n.getAttribute && n.getAttribute('data-msa-feed-hide') === '1') return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
   function findAdMarkers(root) {
     var scope = root || document;
     var hits = [];
@@ -111,6 +140,7 @@ enum InstagramStoryAdSkip {
     try {
       var links = scope.querySelectorAll('a[href*="/stories/ads"], a[href*="sponsored"], a[href*="/ads/"]');
       for (var i = 0; i < links.length; i++) {
+        if (isFeedHidden(links[i])) continue;
         hits.push({ kind: 'href', text: links[i].getAttribute('href') || '' });
       }
     } catch (e) {}
@@ -121,6 +151,7 @@ enum InstagramStoryAdSkip {
         '[data-ad-preview], [data-ad-rendering-role], [data-ad-media], [aria-label*="Sponsored" i], [aria-label*="Advertisement" i]'
       );
       for (var m = 0; m < marked.length; m++) {
+        if (isFeedHidden(marked[m])) continue;
         var al = marked[m].getAttribute('aria-label') || marked[m].getAttribute('data-ad-rendering-role') || 'ad-attr';
         hits.push({ kind: 'attr', text: normText(al) });
       }
@@ -131,6 +162,7 @@ enum InstagramStoryAdSkip {
       var nodes = scope.querySelectorAll('span, div, a, h1, h2, h3, button, [role="button"]');
       for (var n = 0; n < nodes.length; n++) {
         var el = nodes[n];
+        if (isFeedHidden(el)) continue;
         var full = el.textContent || '';
         if (!full || full.length > 40) continue;
         // Prefer leaf-ish nodes so captions do not false-positive.
@@ -219,6 +251,7 @@ enum InstagramStoryAdSkip {
         return;
       }
       var root = storyRoot();
+      if (!root) return;
       var hits = findAdMarkers(root);
       if (!hits.length) return;
 
