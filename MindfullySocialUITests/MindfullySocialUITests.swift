@@ -56,6 +56,75 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
     }
 
+    /// MSA-28: top web chrome must receive taps; swipe-down must still dismiss.
+    @MainActor
+    func testInstagramTopChromeTapsAndSwipeDismiss() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-OpenSite", "instagram"]
+        app.launch()
+
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 6)
+        dismissIGAlerts(in: app)
+
+        let beforeTop = XCTAttachment(screenshot: app.screenshot())
+        beforeTop.name = "msa28-ig-before-top-taps"
+        beforeTop.lifetime = .keepAlways
+        add(beforeTop)
+
+        // Tap Instagram top chrome pockets (back / leading, center, trailing).
+        // These must reach WKWebView — the dismiss strip must not eat them.
+        let web = app.webViews.firstMatch.exists ? app.webViews.firstMatch : app
+        let leading = web.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.07))
+        let center = web.coordinate(withNormalizedOffset: CGVector(dx: 0.50, dy: 0.07))
+        let trailing = web.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.07))
+
+        leading.tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        let afterLeading = XCTAttachment(screenshot: app.screenshot())
+        afterLeading.name = "msa28-ig-after-leading-tap"
+        afterLeading.lifetime = .keepAlways
+        add(afterLeading)
+
+        center.tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        let afterCenter = XCTAttachment(screenshot: app.screenshot())
+        afterCenter.name = "msa28-ig-after-center-tap"
+        afterCenter.lifetime = .keepAlways
+        add(afterCenter)
+
+        trailing.tap()
+        Thread.sleep(forTimeInterval: 1.2)
+        let afterTrailing = XCTAttachment(screenshot: app.screenshot())
+        afterTrailing.name = "msa28-ig-after-trailing-tap"
+        afterTrailing.lifetime = .keepAlways
+        add(afterTrailing)
+
+        // Taps must not have dismissed the sheet.
+        let stillInBrowser = app.otherElements["browserWebView"].exists
+            || app.webViews.firstMatch.exists
+            || app.otherElements["browserDismissStrip"].exists
+        XCTAssertTrue(stillInBrowser, "top chrome taps dismissed the browser sheet")
+
+        // Hold so continuous Tart video shows the top-tap sequence clearly.
+        Thread.sleep(forTimeInterval: 2)
+
+        dismissBrowser(in: app)
+        let instagram = app.buttons["site-instagram"]
+        for _ in 0..<4 where !instagram.isHittable {
+            dismissBrowser(in: app)
+        }
+        XCTAssertTrue(instagram.waitForExistence(timeout: 15) && instagram.isHittable,
+                      "swipe dismiss did not restore hittable Instagram home row")
+
+        Thread.sleep(forTimeInterval: 3)
+        let afterDismiss = XCTAttachment(screenshot: app.screenshot())
+        afterDismiss.name = "msa28-ig-after-swipe-dismiss"
+        afterDismiss.lifetime = .keepAlways
+        add(afterDismiss)
+        Thread.sleep(forTimeInterval: 1)
+    }
+
     @MainActor
     func testHomeListOpensInstagramAndYouTube() throws {
         let app = XCUIApplication()
@@ -881,7 +950,8 @@ final class MindfullySocialUITests: XCTestCase {
         if strip.waitForExistence(timeout: 2) {
             start = strip.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
         } else {
-            start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.045))
+            // Safe-area / sheet-indicator band (top-edge pan host).
+            start = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.035))
         }
         let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
         start.press(forDuration: 0.12, thenDragTo: end)

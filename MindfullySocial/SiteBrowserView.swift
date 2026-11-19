@@ -12,15 +12,18 @@ struct SiteBrowserView: View {
             WebView(model: model)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityIdentifier("browserWebView")
+                // Pan lives on the UIKit host with cancelsTouchesInView=false so
+                // Instagram/Reddit top chrome keeps receiving taps.
+                .background(TopEdgeDismissGesture(onDismiss: onClose))
 
-            // Invisible top strip: sites like Reddit capture scroll so the system
-            // grabber alone is unreliable — swipe-down here calls onClose.
+            // Accessibility / UITest anchor only — must not steal hits from WKWebView.
             Color.clear
-                .frame(height: 36)
+                .frame(height: 28)
                 .frame(maxWidth: .infinity)
-                .contentShape(Rectangle())
-                .highPriorityGesture(dismissDrag)
+                .allowsHitTesting(false)
+                .accessibilityElement()
                 .accessibilityIdentifier("browserDismissStrip")
+                .accessibilityLabel("Browser dismiss grabber")
 
             if showSwipeTip {
                 Text("Swipe down to leave")
@@ -60,15 +63,6 @@ struct SiteBrowserView: View {
         .onDisappear {
             UsageTimeStore.endSession(for: site.id)
         }
-    }
-
-    private var dismissDrag: some Gesture {
-        DragGesture(minimumDistance: 24, coordinateSpace: .local)
-            .onEnded { value in
-                if value.translation.height > 70, abs(value.translation.width) < 120 {
-                    onClose()
-                }
-            }
     }
 
     private func scheduleSwipeTipHide() {

@@ -22,6 +22,7 @@
 		A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001E /* InstagramFeedHideTweaks.swift */; };
 		A1000000000000000000000F /* InstagramAppPromoHide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001F /* InstagramAppPromoHide.swift */; };
 		A10000000000000000000034 /* InstagramStoryAdSkip.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000035 /* InstagramStoryAdSkip.swift */; };
+		A10000000000000000000036 /* TopEdgeDismissGesture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000037 /* TopEdgeDismissGesture.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -52,6 +53,7 @@
 		A1000000000000000000001E /* InstagramFeedHideTweaks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramFeedHideTweaks.swift; sourceTree = "<group>"; };
 		A1000000000000000000001F /* InstagramAppPromoHide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramAppPromoHide.swift; sourceTree = "<group>"; };
 		A10000000000000000000035 /* InstagramStoryAdSkip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStoryAdSkip.swift; sourceTree = "<group>"; };
+		A10000000000000000000037 /* TopEdgeDismissGesture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopEdgeDismissGesture.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +91,7 @@
 				A10000000000000000000017 /* Site.swift */,
 				A1000000000000000000001B /* UsageTime.swift */,
 				A10000000000000000000018 /* SiteBrowserView.swift */,
+				A10000000000000000000037 /* TopEdgeDismissGesture.swift */,
 				A10000000000000000000013 /* BrowserModel.swift */,
 				A10000000000000000000014 /* WebView.swift */,
 				A1000000000000000000001C /* InstagramChromeTweaks.swift */,
@@ -223,6 +226,7 @@
 				A10000000000000000000006 /* Site.swift in Sources */,
 				A1000000000000000000000B /* UsageTime.swift in Sources */,
 				A10000000000000000000007 /* SiteBrowserView.swift in Sources */,
+				A10000000000000000000036 /* TopEdgeDismissGesture.swift in Sources */,
 				A10000000000000000000003 /* BrowserModel.swift in Sources */,
 				A10000000000000000000004 /* WebView.swift in Sources */,
 				A1000000000000000000000C /* InstagramChromeTweaks.swift in Sources */,
