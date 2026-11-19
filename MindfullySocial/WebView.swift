@@ -13,8 +13,14 @@ struct WebView: UIViewRepresentable {
         let wv = model.webView
         wv.scrollView.contentInsetAdjustmentBehavior = .never
         wv.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
-        wv.backgroundColor = .black
+        // Soft dark under-page (≈ Color(white: 0.11)) — avoid white flash before HTML paints.
+        let softDark = UIColor(white: 0.11, alpha: 1)
+        wv.backgroundColor = softDark
+        wv.scrollView.backgroundColor = softDark
         wv.isOpaque = true
+        if #available(iOS 15.0, *) {
+            wv.underPageBackgroundColor = softDark
+        }
 
         // MSA-30: record real taps without stealing them from Instagram.
         let tap = UITapGestureRecognizer(

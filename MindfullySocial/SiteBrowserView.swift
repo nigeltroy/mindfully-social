@@ -6,6 +6,17 @@ struct SiteBrowserView: View {
 
     @StateObject private var model = BrowserModel()
     @State private var showSwipeTip = true
+    /// Soft-dark from first sheet frame for Instagram (before onAppear / model poll).
+    /// Prevents chaos BUG-1 blank white grabber-only paint.
+    @State private var showOpeningCover: Bool
+
+    init(site: Site, onClose: @escaping () -> Void) {
+        self.site = site
+        self.onClose = onClose
+        let args = ProcessInfo.processInfo.arguments
+        let disabled = args.contains("-DisableStableCover")
+        _showOpeningCover = State(initialValue: site.id == "instagram" && !disabled)
+    }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -46,7 +57,8 @@ struct SiteBrowserView: View {
             }
 
             // MSA-32: soft-dark cover until first stable paint after IG script injections.
-            if model.showStableCover {
+            // Opening cover is on from first frame; model flag extends it through settle.
+            if showOpeningCover || model.showStableCover {
                 Color(white: 0.11)
                     .ignoresSafeArea()
                     .accessibilityIdentifier("browserStableCover")
@@ -60,7 +72,7 @@ struct SiteBrowserView: View {
         // Full-bleed into top and bottom safe areas (Instagram/YouTube chrome owns insets).
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
-        .animation(.easeOut(duration: 0.28), value: model.showStableCover)
+        .animation(.easeOut(duration: 0.28), value: showOpeningCover || model.showStableCover)
         .onAppear {
             model.installSiteTweaks(for: site.id)
             model.beginStableCoverIfNeeded(for: site.id)
@@ -74,6 +86,12 @@ struct SiteBrowserView: View {
             model.load(url: resolveLaunchURL(for: site))
             model.startExploreDumpIfRequested()
             scheduleSwipeTipHide()
+        }
+        .onChange(of: model.showStableCover) { _, showing in
+            // Drop first-frame cover only after model has finished its settle poll.
+            if site.id == "instagram", !showing {
+                showOpeningCover = false
+            }
         }
         .onDisappear {
             UsageTimeStore.endSession(for: site.id)

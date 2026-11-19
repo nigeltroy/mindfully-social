@@ -58,6 +58,8 @@ struct HomeView: View {
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                // MSA-32 / chaos BUG-1: never flash system-white sheet under WKWebView.
+                .presentationBackground(HomePalette.background)
                 // Keep `.scrolls` (MSA-20): mid-sheet pans scroll the site, not dismiss.
                 // Reddit leave uses the invisible top dismiss strip in SiteBrowserView.
                 .presentationContentInteraction(.scrolls)

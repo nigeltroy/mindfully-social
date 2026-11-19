@@ -2,6 +2,7 @@ import Foundation
 
 /// MSA-32: keep a soft-dark cover over Instagram until the first stable paint
 /// after site tweak scripts have run (promo hide + sibling injections), then reveal.
+/// Chaos BUG-1: first paint must not be empty white (grabber-only sheet).
 enum InstagramStableCover {
     /// Injected first at document-start so the page never flashes unstable chrome.
     static let userScriptSource: String = #"""
@@ -13,9 +14,9 @@ enum InstagramStableCover {
   var STYLE_ID = 'msa-stable-cover-style';
   // Soft dark gray ≈ Color(white: 0.11)
   var COVER_BG = '#1c1c1c';
-  var QUIET_MS = 480;
-  var MIN_MS = 320;
-  var MAX_MS = 9000;
+  var QUIET_MS = 520;
+  var MIN_MS = 480;
+  var MAX_MS = 10000;
   var startedAt = Date.now();
   var lastMutationAt = Date.now();
   var revealed = false;
@@ -23,6 +24,20 @@ enum InstagramStableCover {
   var revealReason = null;
   var pollTimer = null;
   var mo = null;
+
+  function paintShellDark() {
+    try {
+      var root = document.documentElement;
+      if (root) {
+        root.style.setProperty('background', COVER_BG, 'important');
+        root.style.setProperty('background-color', COVER_BG, 'important');
+      }
+      if (document.body) {
+        document.body.style.setProperty('background', COVER_BG, 'important');
+        document.body.style.setProperty('background-color', COVER_BG, 'important');
+      }
+    } catch (e) {}
+  }
 
   function ensureStyle() {
     var style = document.getElementById(STYLE_ID);
@@ -32,6 +47,10 @@ enum InstagramStableCover {
       (document.documentElement || document.head || document.body).appendChild(style);
     }
     style.textContent = [
+      'html, body {',
+      '  background: ' + COVER_BG + ' !important;',
+      '  background-color: ' + COVER_BG + ' !important;',
+      '}',
       '#' + COVER_ID + ' {',
       '  position: fixed !important;',
       '  inset: 0 !important;',
@@ -51,6 +70,7 @@ enum InstagramStableCover {
 
   function ensureCover() {
     if (!enabled || revealed) return;
+    paintShellDark();
     ensureStyle();
     var el = document.getElementById(COVER_ID);
     if (el) return el;
@@ -68,14 +88,54 @@ enum InstagramStableCover {
     if (el && el.parentNode) el.parentNode.removeChild(el);
   }
 
-  function hasMainChrome() {
+  function visibleRect(el) {
     try {
-      if (document.querySelector('a[href="/"], a[href="/explore/"], a[href*="/direct"]')) {
-        return true;
+      var r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) return null;
+      if (r.bottom < 0 || r.top > window.innerHeight) return null;
+      return r;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /** Real painted feed/chrome — not an empty white sheet with a grabber. */
+  function hasRealContent() {
+    try {
+      var articles = document.querySelectorAll('article');
+      for (var i = 0; i < articles.length; i++) {
+        var ar = visibleRect(articles[i]);
+        if (ar && ar.height > 120 && ar.width > window.innerWidth * 0.5) return true;
       }
-      if (document.querySelector('article, main, [role="main"]')) return true;
-      // Logged-out / interstitial still has enough structure to settle.
-      if (document.body && document.body.childElementCount > 2) return true;
+      var media = document.querySelectorAll('img, video, canvas');
+      var mediaHits = 0;
+      for (var m = 0; m < media.length && mediaHits < 3; m++) {
+        var mr = visibleRect(media[m]);
+        if (mr && mr.height > 64 && mr.width > 64) mediaHits++;
+      }
+      if (mediaHits >= 2) return true;
+
+      // Bottom nav with real tab links painted near the bottom.
+      var home = document.querySelector('a[href="/"]');
+      var explore = document.querySelector('a[href="/explore/"]');
+      if (home && explore) {
+        var hr = visibleRect(home);
+        var er = visibleRect(explore);
+        if (
+          hr &&
+          er &&
+          hr.top > window.innerHeight - 120 &&
+          er.top > window.innerHeight - 120
+        ) {
+          // Still require some main content above nav (not blank).
+          var main = document.querySelector('main, [role="main"], section');
+          if (main) {
+            var mainR = visibleRect(main);
+            if (mainR && mainR.height > 160) return true;
+          }
+          if (mediaHits >= 1) return true;
+        }
+      }
     } catch (e) {}
     return false;
   }
@@ -136,11 +196,13 @@ enum InstagramStableCover {
     if (revealed) return;
     ensureCover();
     if (timedOut()) {
-      reveal('timeout');
+      // Prefer revealing only if something real painted; else keep dark shell.
+      if (hasRealContent()) reveal('timeout');
+      else reveal('timeout-empty');
       return;
     }
     if (!minElapsed()) return;
-    if (!hasMainChrome()) return;
+    if (!hasRealContent()) return;
     if (!promoLooksClear()) return;
     if (!quietLongEnough()) return;
     reveal('stable');
@@ -193,19 +255,20 @@ enum InstagramStableCover {
         ageMs: Date.now() - startedAt,
         quietMs: Date.now() - lastMutationAt,
         hasCover: !!document.getElementById(COVER_ID),
-        hasMainChrome: hasMainChrome(),
+        hasRealContent: hasRealContent(),
         promoClear: promoLooksClear(),
-        scriptCanary: 'stablecover-v1',
+        scriptCanary: 'stablecover-v2',
         path: location.pathname
       };
     }
   };
 
+  paintShellDark();
   ensureCover();
   startObserver();
   pollTimer = setInterval(checkReady, 80);
   // Kick early promo scans so cover can clear sooner.
-  for (var d = 0; d < 8; d++) {
+  for (var d = 0; d < 10; d++) {
     (function (delay) {
       setTimeout(function () {
         try {
@@ -214,15 +277,17 @@ enum InstagramStableCover {
           }
         } catch (e) {}
         checkReady();
-      }, 40 + delay * 90);
+      }, 40 + delay * 100);
     })(d);
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    paintShellDark();
     bumpMutation();
     checkReady();
   });
   window.addEventListener('load', function () {
+    paintShellDark();
     bumpMutation();
     checkReady();
   });
