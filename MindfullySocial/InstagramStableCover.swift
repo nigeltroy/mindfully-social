@@ -196,9 +196,9 @@ enum InstagramStableCover {
     if (revealed) return;
     ensureCover();
     if (timedOut()) {
-      // Prefer revealing only if something real painted; else keep dark shell.
-      if (hasRealContent()) reveal('timeout');
-      else reveal('timeout-empty');
+      // Never drop into blank white — keep soft-dark cover if feed never painted.
+      if (hasRealContent() && promoLooksClear()) reveal('timeout');
+      else ensureCover();
       return;
     }
     if (!minElapsed()) return;

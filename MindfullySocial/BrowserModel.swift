@@ -176,8 +176,9 @@ final class BrowserModel: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         stableCoverPollTimer = timer
-        // Hard cap so the UI never sticks if JS never signals.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+        // Soft cap: only used after JS reports ready. Empty IG must not flash white
+        // (chaos BUG-1) — JS keeps its cover; native waits longer for settle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 16) { [weak self] in
             self?.revealStableCoverIfNeeded()
         }
     }
@@ -188,7 +189,7 @@ final class BrowserModel: ObservableObject {
             stableCoverPollTimer = nil
             return
         }
-        if let started = stableCoverStartedAt, Date().timeIntervalSince(started) > 10 {
+        if let started = stableCoverStartedAt, Date().timeIntervalSince(started) > 16 {
             revealStableCoverIfNeeded()
             return
         }
