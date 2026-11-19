@@ -62,9 +62,12 @@ enum InstagramReelAutoOpenGuard {
       var u = new URL(href, location.origin);
       return pathLooksReel(u.pathname || '');
     } catch (e) {
-      var s = String(href || '').toLowerCase();
-      if (s === '/reels' || s === '/reels/' || /(^|\\/)reels\\/?([?#]|$)/.test(s)) return true;
-      return /\\/reel\\//i.test(s) || /\\/reels\\/(?!audio)/i.test(s);
+      var s = String(href || '').toLowerCase().split('?')[0].split('#')[0];
+      if (s === '/reels' || s === '/reels/') return true;
+      if (s.indexOf('/reel/') !== -1) return true;
+      if (s.indexOf('/reels/') !== -1 && s.indexOf('/reels/audio') === -1) return true;
+      if (s.slice(-6) === '/reels') return true;
+      return false;
     }
   }
 
