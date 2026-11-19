@@ -308,15 +308,16 @@ enum InstagramStableCover {
 })()
 """#
 
-    /// True when JS reports ready (or missing → treat as ready so UI never sticks).
+    /// True only when JS cover has revealed. Missing install → false so native
+    /// cover stays up (chaos BUG-1). Native 10s hard-cap still prevents a stuck UI.
     static let isReadyScript: String = #"""
 (function () {
   try {
-    if (!window.__msaStableCoverInstalled) return true;
+    if (!window.__msaStableCoverInstalled) return false;
     if (!window.__msaStableCover) return false;
     return !!window.__msaStableCover.isReady();
   } catch (e) {
-    return true;
+    return false;
   }
 })()
 """#
