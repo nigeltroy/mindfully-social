@@ -15,6 +15,7 @@ final class BrowserModel: ObservableObject {
     private var appPromoDumpTimer: Timer?
     private var aiHideDumpTimer: Timer?
     private var reelGuardDumpTimer: Timer?
+    private var reelsNavDumpTimer: Timer?
     /// MSA-30: last real tap on the WKWebView (gesture-gated reel opens).
     private var lastTrustedInteractionAt: Date?
     private var intentionalReelPath: String?
@@ -559,6 +560,44 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-reel-guard-dump-\(suffix).json")
             try? body.write(to: url, atomically: true, encoding: .utf8)
             NSLog("MSA ReelGuardDump: wrote %@", url.lastPathComponent)
+        }
+    }
+
+    /// `-DumpIGNav` → Documents/msa-reels-nav-dump-*.json (MSA-34 clapper / bottom-nav proof).
+    func startReelsNavProbeIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGNav") else { return }
+        reelsNavDumpTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.writeReelsNavDump(suffix: "live")
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        reelsNavDumpTimer = timer
+        for delay in [4.0, 8.0, 12.0, 18.0, 26.0, 36.0, 48.0, 70.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.writeReelsNavDump(suffix: String(Int(delay)))
+            }
+        }
+    }
+
+    private func writeReelsNavDump(suffix: String) {
+        webView.evaluateJavaScript(InstagramChromeTweaks.dumpNavScript) { result, error in
+            let body: String
+            if let error {
+                body = "{\"error\":\"evaluate\",\"detail\":\"\(error.localizedDescription)\"}\n"
+            } else if let text = result as? String {
+                body = text + "\n"
+            } else {
+                body = "{\"error\":\"non_string_result\"}\n"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-reels-nav-dump-\(suffix).json")
+            try? body.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("MSA ReelsNavDump: wrote %@", url.lastPathComponent)
         }
     }
 }
