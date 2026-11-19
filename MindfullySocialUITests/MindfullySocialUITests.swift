@@ -1028,7 +1028,8 @@ final class MindfullySocialUITests: XCTestCase {
             "/kumarmethod/",
             extraArgs: ["-DisableAIHide", "-DumpIGAI", "-SimulateAIContent"]
         )
-        Thread.sleep(forTimeInterval: 3)
+        // Wait for plant (no hide) so BEFORE stills show AI chrome.
+        Thread.sleep(forTimeInterval: 6)
         attach("ai-hide-before-kumarmethod-top")
 
         for _ in 0..<5 {
@@ -1064,7 +1065,7 @@ final class MindfullySocialUITests: XCTestCase {
             "/techroastshow/",
             extraArgs: ["-DisableAIHide", "-DumpIGAI", "-SimulateAIContent"]
         )
-        Thread.sleep(forTimeInterval: 3)
+        Thread.sleep(forTimeInterval: 6)
         attach("ai-hide-before-techroastshow-top")
 
         for _ in 0..<4 {

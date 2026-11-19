@@ -682,6 +682,15 @@ enum InstagramAIContentHide {
     }
   }
 
+  function isMarkedAncestor(el) {
+    var n = el;
+    while (n && n !== document.body) {
+      if (n.getAttribute && n.getAttribute(MARK) === '1') return true;
+      n = n.parentElement;
+    }
+    return false;
+  }
+
   function liveAILabels() {
     var labels = [];
     var nodes = document.querySelectorAll(
@@ -690,11 +699,14 @@ enum InstagramAIContentHide {
     for (var i = 0; i < nodes.length && labels.length < 40; i++) {
       var el = nodes[i];
       if (el.getAttribute(MARK) === '1') continue;
+      if (isMarkedAncestor(el)) continue;
       if (isInBottomNav(el)) continue;
       try {
         var r = el.getBoundingClientRect();
         if (r.width < 6 || r.height < 6) continue;
         if (r.bottom < 0 || r.top > window.innerHeight) continue;
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || st.opacity === '0') continue;
       } catch (e) {
         continue;
       }
@@ -736,7 +748,14 @@ enum InstagramAIContentHide {
 
   function simulateAIMarkers(delayMs) {
     try {
-      // Clear prior sims so re-entry from dump timers stays idempotent.
+      // Plant once per page — dump timers used to re-plant every few seconds and
+      // leave a visible window before the delayed hide (false AFTER failures).
+      if (window.__msaAISimPlanted && document.querySelector('[data-msa-ai-sim="1"]')) {
+        if (enabled) applyAIHide();
+        return 'already-planted';
+      }
+      window.__msaAISimPlanted = true;
+
       var old = document.querySelectorAll('[data-msa-ai-sim="1"]');
       for (var o = 0; o < old.length; o++) {
         try {
@@ -870,11 +889,16 @@ enum InstagramAIContentHide {
       story.appendChild(storySticker);
       document.documentElement.appendChild(story);
 
-      var wait = typeof delayMs === 'number' ? delayMs : 2000;
+      // When hide is on, collapse immediately (SocialLite-style: no flash of AI chrome).
+      // Still schedule a reinforce pass for late layout.
+      var wait = typeof delayMs === 'number' ? delayMs : 500;
+      if (enabled) {
+        applyAIHide();
+      }
       setTimeout(function () {
         applyAIHide();
       }, wait);
-      return 'planted-v2:' + wait;
+      return 'planted-v2:' + wait + (enabled ? ':hidden' : ':visible');
     } catch (e) {
       return String(e);
     }
