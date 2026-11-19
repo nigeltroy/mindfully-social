@@ -13,6 +13,7 @@ final class BrowserModel: ObservableObject {
     private var installedTweaksSiteID: String?
     private var feedDumpTimer: Timer?
     private var appPromoDumpTimer: Timer?
+    private var aiHideDumpTimer: Timer?
 
     init() {
         let config = WKWebViewConfiguration()
@@ -44,6 +45,7 @@ final class BrowserModel: ObservableObject {
                     self?.applyFeedHideLaunchFlagsIfNeeded()
                     self?.applyAppPromoHideLaunchFlagsIfNeeded()
                     self?.applyExploreBlankLaunchFlagsIfNeeded()
+                    self?.applyAIHideLaunchFlagsIfNeeded()
                 }
             }
         })
@@ -58,7 +60,8 @@ final class BrowserModel: ObservableObject {
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
     /// Injects MSA-16 Reels-nav, MSA-18 feed-ad hide, MSA-19/22 Explore scripts,
-    /// MSA-21 app-promo hide, and MSA-23 Stories sponsored-ad auto-skip.
+    /// MSA-21 app-promo hide, MSA-23 Stories sponsored-ad auto-skip,
+    /// and MSA-29 Meta AI / AI-content hide.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -70,7 +73,8 @@ final class BrowserModel: ObservableObject {
             InstagramChromeTweaks.feedHideUserScriptSource,
             InstagramSearchReelsHide.searchReelsHideUserScriptSource,
             InstagramAppPromoHide.userScriptSource,
-            InstagramStoryAdSkip.userScriptSource
+            InstagramStoryAdSkip.userScriptSource,
+            InstagramAIContentHide.userScriptSource
         ]
         for source in sources {
             let script = WKUserScript(
@@ -360,6 +364,70 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-story-ad-skip-dump-\(suffix).json")
             try? body.write(to: url, atomically: true, encoding: .utf8)
             NSLog("MSA StoryAdSkipDump: wrote %@", url.lastPathComponent)
+        }
+    }
+
+    /// Tart proof helpers:
+    /// `-DisableAIHide` → leave Meta AI / Made-with-AI chrome visible for before shots
+    /// `-DumpIGAI` → write Documents/msa-ai-hide-dump-*.json periodically
+    /// `-SimulateAIContent` → plant Made with AI + Ask Meta AI markers for mechanism proof
+    func startAIHideProbeIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DumpIGAI") || args.contains("-DisableAIHide") || args.contains("-SimulateAIContent") else {
+            return
+        }
+        applyAIHideLaunchFlagsIfNeeded()
+        guard args.contains("-DumpIGAI") || args.contains("-SimulateAIContent") else { return }
+        aiHideDumpTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.maybeSimulateAIContentIfRequested()
+                self?.writeAIHideDump(suffix: "live")
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        aiHideDumpTimer = timer
+        let delays: [Double] = [4, 8, 12, 18, 26, 36, 48, 70, 90, 110, 130]
+        for delay in delays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.applyAIHideLaunchFlagsIfNeeded()
+                self?.maybeSimulateAIContentIfRequested()
+                self?.writeAIHideDump(suffix: String(Int(delay)))
+            }
+        }
+    }
+
+    /// `-SimulateAIContent` → plant AI chrome markers (Tart mechanism proof).
+    private func maybeSimulateAIContentIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-SimulateAIContent") else { return }
+        let js = #"(function(){try{if(window.__msaAIHide&&window.__msaAIHide.simulateAI){return window.__msaAIHide.simulateAI(2200);}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func applyAIHideLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableAIHide") else { return }
+        let js = #"(function(){try{if(window.__msaAIHide&&window.__msaAIHide.setEnabled){window.__msaAIHide.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func writeAIHideDump(suffix: String) {
+        webView.evaluateJavaScript(InstagramAIContentHide.dumpScript) { result, error in
+            let body: String
+            if let error {
+                body = "{\"error\":\"evaluate\",\"detail\":\"\(error.localizedDescription)\"}\n"
+            } else if let text = result as? String {
+                body = text + "\n"
+            } else {
+                body = "{\"error\":\"non_string_result\"}\n"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-ai-hide-dump-\(suffix).json")
+            try? body.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("MSA AIHideDump: wrote %@", url.lastPathComponent)
         }
     }
 }

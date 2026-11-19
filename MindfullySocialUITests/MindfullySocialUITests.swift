@@ -585,6 +585,7 @@ final class MindfullySocialUITests: XCTestCase {
         }
         // Tart guest fallback used when xcodebuild does not forward env into the test runner.
         let candidates: [(URL, URL)] = [
+            (URL(fileURLWithPath: "/tmp/msa29-ig-user.txt"), URL(fileURLWithPath: "/tmp/msa29-ig-pass.txt")),
             (URL(fileURLWithPath: "/tmp/msa23-ig-user.txt"), URL(fileURLWithPath: "/tmp/msa23-ig-pass.txt")),
             (URL(fileURLWithPath: "/tmp/msa19-ig-user.txt"), URL(fileURLWithPath: "/tmp/msa19-ig-pass.txt"))
         ]
@@ -930,6 +931,150 @@ final class MindfullySocialUITests: XCTestCase {
         afterHome.name = "app-promo-after-home"
         afterHome.lifetime = .keepAlways
         add(afterHome)
+    }
+
+    /// MSA-29: hide Meta AI / Made-with-AI chrome. Visits @kumarmethod and @techroastshow
+    /// (Nigel: their posts include AI content examples). Before = hide off; after = hide on
+    /// (+ SimulateAIContent mechanism markers). Dumps via `-DumpIGAI`.
+    @MainActor
+    func testInstagramAIContentHideProof() throws {
+        let app = XCUIApplication()
+
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = name
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+
+        func ensureLoggedInIfNeeded() {
+            dismissIGAlerts(in: app)
+            guard let creds = instagramCredentials() else { return }
+            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
+            let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
+            guard loginLink.waitForExistence(timeout: 4) else { return }
+            if loginLink.isHittable { loginLink.tap() }
+            Thread.sleep(forTimeInterval: 3)
+            dismissIGAlerts(in: app)
+            let web = app.webViews.firstMatch
+            guard web.waitForExistence(timeout: 8) else { return }
+            let userField = web.textFields.firstMatch
+            guard userField.waitForExistence(timeout: 8) else { return }
+            userField.tap()
+            userField.typeText(creds.username)
+            let passField = web.secureTextFields.firstMatch
+            if passField.waitForExistence(timeout: 5) {
+                passField.tap()
+                passField.typeText(creds.password)
+            }
+            let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
+            if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
+                loginBtn.tap()
+            }
+            Thread.sleep(forTimeInterval: 12)
+            dismissIGAlerts(in: app)
+        }
+
+        // --- BEFORE: AI hide disabled on @kumarmethod ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/kumarmethod/",
+            "-DisableAIHide",
+            "-DumpIGAI"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 10)
+        ensureLoggedInIfNeeded()
+        // Re-open profile if login bounced us to home feed.
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/kumarmethod/",
+            "-DisableAIHide",
+            "-DumpIGAI"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 12)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-before-kumarmethod-top")
+
+        for _ in 0..<5 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.1)
+        }
+        Thread.sleep(forTimeInterval: 2)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-before-kumarmethod-scroll")
+
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+
+        // --- AFTER: hide enabled + simulate markers on @kumarmethod ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/kumarmethod/",
+            "-DumpIGAI",
+            "-SimulateAIContent"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 12)
+        dismissIGAlerts(in: app)
+        // Hold so -SimulateAIContent can plant then hide (2.2s delay).
+        Thread.sleep(forTimeInterval: 5)
+        attach("ai-hide-after-kumarmethod-top")
+
+        for _ in 0..<6 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.1)
+        }
+        Thread.sleep(forTimeInterval: 3)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-after-kumarmethod-scroll")
+
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+
+        // --- AFTER: @techroastshow profile (second AI-content source) ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-OpenPath", "/techroastshow/",
+            "-DumpIGAI",
+            "-SimulateAIContent"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 12)
+        dismissIGAlerts(in: app)
+        Thread.sleep(forTimeInterval: 5)
+        attach("ai-hide-after-techroastshow-top")
+
+        for _ in 0..<6 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.1)
+        }
+        Thread.sleep(forTimeInterval: 3)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-after-techroastshow-scroll")
+
+        // Search / Explore + Home — AI chrome must stay gone.
+        let searchTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.37, dy: 0.93))
+        searchTap.tap()
+        Thread.sleep(forTimeInterval: 6)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-after-search")
+
+        let homeTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.93))
+        homeTap.tap()
+        Thread.sleep(forTimeInterval: 6)
+        dismissIGAlerts(in: app)
+        attach("ai-hide-after-home")
+
+        // Keep process alive so -DumpIGAI timers flush.
+        Thread.sleep(forTimeInterval: 8)
     }
 
     @MainActor
