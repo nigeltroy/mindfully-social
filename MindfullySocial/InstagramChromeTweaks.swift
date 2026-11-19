@@ -3,12 +3,15 @@ import Foundation
 /// Injected CSS/JS that hides Instagram’s Reels bottom-nav tab and
 /// redistributes the remaining icons evenly. Re-applies after SPA updates.
 ///
-/// Critical: hide **Reels only** (`/reels` / `/reels/`). Never hide Direct/Messages (`/direct`).
+/// Critical: hide **Reels only** (`/reels` / `/reels/` / aria Reels). Never hide
+/// Direct/Messages (`/direct`). MSA-30: harden for Create/Shop 5-tab chrome
+/// (chaos-soak BUG-2 — SocialLite removes Reels tab entirely).
 enum InstagramChromeTweaks {
     static let userScriptSource: String = #"""
 (function () {
   if (window.__msaReelsInstalled) return;
   window.__msaReelsInstalled = true;
+  window.__msaReelsCanary = 'reels-nav-v2';
 
   var STYLE_ID = 'msa-hide-reels-style';
 
@@ -23,7 +26,16 @@ enum InstagramChromeTweaks {
       /* Exact bottom-tab href only (in-feed uses /reels/audio/... or /…/reel/…). */
       'a[href="/reels/"],',
       'a[href="/reels"],',
-      'a[href^="/reels/?"] {',
+      'a[href^="/reels/?"],',
+      'a[href^="https://www.instagram.com/reels"],',
+      'a[href^="https://instagram.com/reels"],',
+      /* Chaos-soak BUG-2: some builds label the tab without a stable /reels href. */
+      'a[aria-label="Reels" i],',
+      'a[aria-label^="Reels" i],',
+      '[role="link"][aria-label="Reels" i],',
+      '[role="link"][aria-label^="Reels" i],',
+      '[role="tab"][aria-label="Reels" i],',
+      '[role="tab"][aria-label^="Reels" i] {',
       '  display: none !important;',
       '  pointer-events: none !important;',
       '}',
@@ -87,11 +99,49 @@ enum InstagramChromeTweaks {
   }
 
   function isExactReelsPath(path) {
-    return path === '/reels' || path === '/reels/';
+    var p = String(path || '').toLowerCase().split('?')[0].split('#')[0];
+    return p === '/reels' || p === '/reels/';
   }
 
   function isDirectPath(path) {
     return path === '/direct' || path.indexOf('/direct/') === 0;
+  }
+
+  function tabLabel(el) {
+    var parts = [];
+    try { parts.push(el.getAttribute('aria-label') || ''); } catch (e) {}
+    try {
+      var t = el.querySelector && el.querySelector('title');
+      if (t) parts.push(t.textContent || '');
+    } catch (e2) {}
+    try { parts.push(el.getAttribute('href') || ''); } catch (e3) {}
+    return parts.join(' ').replace(/\s+/g, ' ').trim().toLowerCase();
+  }
+
+  function isReelsTabControl(el) {
+    if (!el) return false;
+    var p = pathOf(el);
+    if (isDirectPath(p)) return false;
+    if (isExactReelsPath(p)) return true;
+    var label = tabLabel(el);
+    // Exact / leading "reels" only — avoid captions that mention reels.
+    if (label === 'reels' || label.indexOf('reels ') === 0 || label.indexOf('reels/') !== -1) {
+      return true;
+    }
+    if (/\breels\b/.test(label) && label.length <= 24) return true;
+    return false;
+  }
+
+  function inBottomBand(el) {
+    try {
+      var r = el.getBoundingClientRect();
+      if (r.width < 28 || r.height < 28) return false;
+      if (r.bottom < window.innerHeight - 120) return false;
+      if (r.top < window.innerHeight - 220) return false;
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
 
   function climbToDirectChild(el, ancestor) {
@@ -103,24 +153,17 @@ enum InstagramChromeTweaks {
   }
 
   function findBottomNavHome() {
-    var anchors = document.querySelectorAll('a[href]');
+    var anchors = document.querySelectorAll('a[href], [role="link"], [role="tab"]');
     var best = null;
     for (var i = 0; i < anchors.length; i++) {
       var a = anchors[i];
       if (!isVisible(a)) continue;
-      var r = a.getBoundingClientRect();
-      if (r.bottom < window.innerHeight - 110) continue;
-      if (r.top < window.innerHeight - 180) continue;
-      if (r.width < 36 || r.height < 36) continue;
+      if (!inBottomBand(a)) continue;
       var p = pathOf(a);
-      if (p !== '/' && p !== '') continue;
-      var label = (
-        a.getAttribute('aria-label') ||
-        (a.querySelector('title') && a.querySelector('title').textContent) ||
-        ''
-      ).toLowerCase();
+      var label = tabLabel(a);
+      if (p !== '/' && p !== '' && label.indexOf('home') === -1) continue;
       if (label.indexOf('home') !== -1) return a;
-      if (!best) best = a;
+      if ((p === '/' || p === '') && !best) best = a;
     }
     return best;
   }
@@ -129,16 +172,17 @@ enum InstagramChromeTweaks {
     if (!home) return null;
     var el = home.parentElement;
     while (el && el !== document.body) {
-      var links = el.querySelectorAll(':scope > a[href], :scope > * > a[href]');
-      // Prefer the shallowest parent that directly owns ~4–5 tab links.
+      // Prefer the shallowest parent that directly owns ~4–6 tab links.
       var directTabs = [];
       for (var c = 0; c < el.children.length; c++) {
         var child = el.children[c];
-        var link = child.tagName === 'A' ? child : child.querySelector(':scope > a[href], a[href]');
+        var link = child.tagName === 'A' || child.getAttribute('role') === 'link' || child.getAttribute('role') === 'tab'
+          ? child
+          : child.querySelector('a[href], [role="link"], [role="tab"]');
         if (!link) continue;
+        if (!inBottomBand(link) && !inBottomBand(child)) continue;
         var r = link.getBoundingClientRect();
-        if (r.width < 30 || r.height < 30) continue;
-        if (r.bottom < window.innerHeight - 120) continue;
+        if (r.width < 28 || r.height < 28) continue;
         directTabs.push(link);
       }
       if (directTabs.length >= 4 && directTabs.length <= 6) {
@@ -147,6 +191,33 @@ enum InstagramChromeTweaks {
       el = el.parentElement;
     }
     return null;
+  }
+
+  function markReelsSlot(node, container) {
+    var slot = container ? climbToDirectChild(node, container) : (node.parentElement || node);
+    try {
+      slot.remove();
+      return true;
+    } catch (err) {
+      slot.setAttribute('data-msa-reels-target', '1');
+      slot.style.setProperty('display', 'none', 'important');
+      slot.style.setProperty('flex', '0 0 0', 'important');
+      slot.style.setProperty('width', '0', 'important');
+      node.setAttribute('data-msa-reels-target', '1');
+      return false;
+    }
+  }
+
+  function hideBottomReelsFallback() {
+    var nodes = document.querySelectorAll(
+      'a[href], [role="link"], [role="tab"], [role="button"], button, div[aria-label], span[aria-label]'
+    );
+    for (var i = 0; i < nodes.length; i++) {
+      var a = nodes[i];
+      if (!isVisible(a) || !inBottomBand(a)) continue;
+      if (!isReelsTabControl(a)) continue;
+      markReelsSlot(a, null);
+    }
   }
 
   function dismissBlockingTips() {
@@ -170,20 +241,7 @@ enum InstagramChromeTweaks {
       var home = findBottomNavHome();
       var row = findNavRow(home);
       if (!row) {
-        // Fallback: mark exact /reels/ anchors near the bottom anyway.
-        var anchors = document.querySelectorAll('a[href]');
-        for (var i = 0; i < anchors.length; i++) {
-          var a = anchors[i];
-          if (!isExactReelsPath(pathOf(a))) continue;
-          if (!isVisible(a)) continue;
-          var r = a.getBoundingClientRect();
-          if (r.bottom < window.innerHeight - 120) continue;
-          if (r.top < window.innerHeight - 200) continue;
-          a.setAttribute('data-msa-reels-target', '1');
-          if (a.parentElement && a.parentElement.children.length === 1) {
-            a.parentElement.setAttribute('data-msa-reels-target', '1');
-          }
-        }
+        hideBottomReelsFallback();
         return;
       }
 
@@ -203,30 +261,34 @@ enum InstagramChromeTweaks {
       for (var j = 0; j < container.children.length; j++) {
         var child = container.children[j];
         child.removeAttribute('data-msa-reels-target');
-        var link = child.tagName === 'A' ? child : child.querySelector('a[href]');
-        if (!link) continue;
-        var p = pathOf(link);
-        if (isExactReelsPath(p) && !isDirectPath(p)) {
-          var slot = climbToDirectChild(link, container);
-          // Remove the slot entirely — display:none left a flex/grid hole
-          // between Search and Messages.
-          try {
-            slot.remove();
-          } catch (err) {
-            slot.setAttribute('data-msa-reels-target', '1');
-            slot.style.setProperty('display', 'none', 'important');
-            slot.style.setProperty('flex', '0 0 0', 'important');
-            slot.style.setProperty('width', '0', 'important');
+        var link = child.tagName === 'A' || child.getAttribute('role') === 'link' || child.getAttribute('role') === 'tab'
+          ? child
+          : child.querySelector('a[href], [role="link"], [role="tab"]');
+        if (!link) {
+          // Non-link child (rare) — keep unless it looks like Reels chrome.
+          if (isReelsTabControl(child)) {
+            markReelsSlot(child, container);
+          } else {
+            keep.push(child);
           }
+          continue;
+        }
+        if (isReelsTabControl(link) && !isDirectPath(pathOf(link))) {
+          markReelsSlot(link, container);
           continue;
         }
         keep.push(child);
       }
 
+      // Second pass: catch Reels controls that are not direct children links.
+      hideBottomReelsFallback();
+
       var n = keep.length || 1;
       var pct = (100 / n).toFixed(4) + '%';
       for (var k = 0; k < keep.length; k++) {
         var slotKeep = keep[k];
+        if (!slotKeep || !slotKeep.isConnected) continue;
+        if (slotKeep.getAttribute('data-msa-reels-target') === '1') continue;
         slotKeep.style.setProperty('flex', '1 1 0', 'important');
         slotKeep.style.setProperty('flex-grow', '1', 'important');
         slotKeep.style.setProperty('flex-basis', '0', 'important');
@@ -263,7 +325,7 @@ enum InstagramChromeTweaks {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['href', 'class', 'style']
+        attributeFilter: ['href', 'class', 'style', 'aria-label', 'role']
       });
     } catch (e) {}
   }
@@ -274,7 +336,12 @@ enum InstagramChromeTweaks {
   window.addEventListener('resize', schedule);
   window.addEventListener('popstate', schedule);
   document.addEventListener('visibilitychange', schedule);
-  setInterval(apply, 800);
+  setInterval(apply, 600);
+
+  window.__msaReelsNav = {
+    scriptCanary: 'reels-nav-v2',
+    apply: apply
+  };
 })();
 """#
 }

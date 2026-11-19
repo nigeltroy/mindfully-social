@@ -959,7 +959,9 @@ final class MindfullySocialUITests: XCTestCase {
         waitForBrowser(in: app, timeout: 25)
         Thread.sleep(forTimeInterval: 12)
         dismissIGAlerts(in: app)
+        // BUG-2 / SocialLite bar: Reels bottom-nav tab must be gone on home.
         attach("msa30-feed-idle-start")
+        attach("msa30-reels-tab-hidden-check")
 
         // Idle scroll only — do not tap video/reel tiles. Soft-dismiss at most
         // twice so AX cannot wedge mid-scroll (MSA-30 prior fail).
