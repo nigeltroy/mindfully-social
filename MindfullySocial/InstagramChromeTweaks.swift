@@ -579,25 +579,32 @@ enum InstagramChromeTweaks {
 
   var scheduled = null;
   function schedule() {
+    if (window.__msaScrollBurst) return;
     if (scheduled) return;
     scheduled = setTimeout(function () {
       scheduled = null;
+      if (window.__msaScrollBurst) return;
       apply();
-    }, 50);
+    }, 180);
   }
 
   var mo = new MutationObserver(schedule);
   function start() {
     ensureStyle();
     apply();
-    try {
-      mo.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['href', 'class', 'style', 'aria-label', 'role']
-      });
-    } catch (e) {}
+    var opts = {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['href', 'class', 'style', 'aria-label', 'role']
+    };
+    if (window.__msaRegisterMO) {
+      window.__msaRegisterMO(mo, function () { return document.documentElement; }, opts);
+    } else {
+      try {
+        mo.observe(document.documentElement, opts);
+      } catch (e) {}
+    }
   }
 
   if (document.documentElement) start();
@@ -606,7 +613,18 @@ enum InstagramChromeTweaks {
   window.addEventListener('resize', schedule);
   window.addEventListener('popstate', schedule);
   document.addEventListener('visibilitychange', schedule);
-  setInterval(apply, 500);
+  try {
+    var prevFlush = window.__msaFlushAfterScroll;
+    window.__msaFlushAfterScroll = function () {
+      try {
+        if (typeof prevFlush === 'function') prevFlush();
+      } catch (e2) {}
+      schedule();
+    };
+  } catch (e3) {}
+  setInterval(function () {
+    if (!window.__msaScrollBurst) apply();
+  }, 1200);
 
   window.__msaReelsNav = {
     scriptCanary: 'reels-nav-v4',

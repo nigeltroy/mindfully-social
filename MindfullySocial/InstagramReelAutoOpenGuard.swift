@@ -231,6 +231,7 @@ enum InstagramReelAutoOpenGuard {
   document.addEventListener('click', onClickCapture, true);
 
   var mo = new MutationObserver(function (muts) {
+    if (window.__msaScrollBurst) return;
     for (var i = 0; i < muts.length; i++) {
       var m = muts[i];
       if (m.type === 'childList') {
@@ -245,17 +246,24 @@ enum InstagramReelAutoOpenGuard {
       }
     }
   });
-  try {
-    mo.observe(document.documentElement || document, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['playsinline', 'webkit-playsinline', 'src']
-    });
-  } catch (e3) {}
+  var reelOpts = {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['playsinline', 'webkit-playsinline', 'src']
+  };
+  if (window.__msaRegisterMO) {
+    window.__msaRegisterMO(mo, function () { return document.documentElement || document; }, reelOpts);
+  } else {
+    try {
+      mo.observe(document.documentElement || document, reelOpts);
+    } catch (e3) {}
+  }
 
-  // Dense path watch — Reels-tab SPA landings must bounce quickly.
-  setInterval(apply, 400);
+  // Path watch — slower during feed scroll soak (MSA-36).
+  setInterval(function () {
+    if (!window.__msaScrollBurst) apply();
+  }, 900);
   ['pushState', 'replaceState'].forEach(function () {});
   window.addEventListener('popstate', function () { setTimeout(apply, 0); });
   document.addEventListener('DOMContentLoaded', apply);

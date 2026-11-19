@@ -423,25 +423,32 @@ extension InstagramChromeTweaks {
 
   var scheduled = null;
   function schedule() {
+    if (window.__msaScrollBurst) return;
     if (scheduled) return;
     scheduled = setTimeout(function () {
       scheduled = null;
+      if (window.__msaScrollBurst) return;
       applyFeedHide();
-    }, 60);
+    }, 200);
   }
 
   var mo = new MutationObserver(schedule);
   function start() {
     ensureStyle();
     applyFeedHide();
-    try {
-      mo.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style']
-      });
-    } catch (e) {}
+    var opts = {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style']
+    };
+    if (window.__msaRegisterMO) {
+      window.__msaRegisterMO(mo, function () { return document.documentElement; }, opts);
+    } else {
+      try {
+        mo.observe(document.documentElement, opts);
+      } catch (e) {}
+    }
   }
 
   if (document.documentElement) start();
@@ -449,9 +456,19 @@ extension InstagramChromeTweaks {
 
   window.addEventListener('resize', schedule);
   window.addEventListener('popstate', schedule);
-  window.addEventListener('scroll', schedule, { passive: true });
   document.addEventListener('visibilitychange', schedule);
-  setInterval(applyFeedHide, 900);
+  try {
+    var prevFlush = window.__msaFlushAfterScroll;
+    window.__msaFlushAfterScroll = function () {
+      try {
+        if (typeof prevFlush === 'function') prevFlush();
+      } catch (e2) {}
+      schedule();
+    };
+  } catch (e3) {}
+  setInterval(function () {
+    if (!window.__msaScrollBurst) applyFeedHide();
+  }, 1400);
 })();
 """#
 }

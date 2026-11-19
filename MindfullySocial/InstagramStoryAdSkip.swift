@@ -382,14 +382,24 @@ enum InstagramStoryAdSkip {
   function boot() {
     tick();
     try {
-      var obs = new MutationObserver(function () { maybeSkip(); });
-      obs.observe(document.documentElement || document, {
+      var obs = new MutationObserver(function () {
+        if (window.__msaScrollBurst) return;
+        maybeSkip();
+      });
+      var opts = {
         childList: true,
         subtree: true,
-        characterData: true
-      });
+        characterData: false
+      };
+      if (window.__msaRegisterMO) {
+        window.__msaRegisterMO(obs, function () { return document.documentElement || document; }, opts);
+      } else {
+        obs.observe(document.documentElement || document, opts);
+      }
     } catch (e) {}
-    setInterval(tick, SCAN_MS);
+    setInterval(function () {
+      if (!window.__msaScrollBurst) tick();
+    }, SCAN_MS);
   }
 
   if (document.readyState === 'loading') {

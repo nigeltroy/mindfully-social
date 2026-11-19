@@ -24,6 +24,10 @@ final class BrowserModel: ObservableObject {
     private var isBouncingReelURL = false
     private var stableCoverPollTimer: Timer?
     private var stableCoverStartedAt: Date?
+    /// MSA-36 Tart soak: auto-scroll + heartbeat without XCUITest AX.
+    private var chaosScrollTimer: Timer?
+    private var chaosHeartbeatTimer: Timer?
+    private var chaosScrollStartedAt: Date?
 
     init() {
         let config = WKWebViewConfiguration()
@@ -140,6 +144,8 @@ final class BrowserModel: ObservableObject {
         guard siteID == "instagram" else { return }
 
         let sources = [
+            // MSA-36: scroll coalesce first so later tweaks can defer during feed scroll.
+            InstagramScrollCoalesce.userScriptSource,
             InstagramStableCover.userScriptSource,
             InstagramChromeTweaks.userScriptSource,
             InstagramChromeTweaks.feedHideUserScriptSource,
@@ -417,9 +423,88 @@ final class BrowserModel: ObservableObject {
 
     private func applyAppPromoHideLaunchFlagsIfNeeded() {
         let args = ProcessInfo.processInfo.arguments
-        guard args.contains("-DisableAppPromoHide") else { return }
-        let js = #"(function(){try{if(window.__msaAppPromo&&window.__msaAppPromo.setEnabled){window.__msaAppPromo.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
-        webView.evaluateJavaScript(js, completionHandler: nil)
+        if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+            let url = docs.appendingPathComponent("msa-launch-args.txt")
+            try? args.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+        }
+        let disable = args.contains("-DisableAppPromoHide")
+        // `-AppPromoHideArmAfter <seconds>`: keep hide off, then arm it (same-session before→after).
+        var armAfter: TimeInterval? = nil
+        if let idx = args.firstIndex(of: "-AppPromoHideArmAfter"),
+           args.indices.contains(idx + 1),
+           let sec = TimeInterval(args[idx + 1]),
+           sec > 0 {
+            armAfter = sec
+        }
+        // Also accept `-AppPromoHideArmAfter=28` and UserDefaults.
+        if armAfter == nil {
+            for arg in args {
+                if arg.hasPrefix("-AppPromoHideArmAfter="),
+                   let sec = TimeInterval(arg.split(separator: "=").last.map(String.init) ?? ""),
+                   sec > 0 {
+                    armAfter = sec
+                }
+            }
+        }
+        if armAfter == nil {
+            let ud = UserDefaults.standard.object(forKey: "AppPromoHideArmAfter")
+            if let n = ud as? NSNumber, n.doubleValue > 0 {
+                armAfter = n.doubleValue
+            } else if let s = ud as? String, let sec = TimeInterval(s), sec > 0 {
+                armAfter = sec
+            }
+        }
+        guard disable || armAfter != nil else { return }
+        // Persist across document-start reinject (script resets enabled=true).
+        let disableJS = #"(function(){try{window.__msaAppPromoDisableLaunch=true;if(window.__msaAppPromo&&window.__msaAppPromo.setEnabled){window.__msaAppPromo.setEnabled(false);return 'disabled';}return 'flagged';}catch(e){return String(e);}})()"#
+        let enableJS = #"(function(){try{window.__msaAppPromoDisableLaunch=false;if(window.__msaAppPromo&&window.__msaAppPromo.setEnabled){window.__msaAppPromo.setEnabled(true);if(window.__msaAppPromo.scanNow)window.__msaAppPromo.scanNow();return 'enabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(disableJS, completionHandler: nil)
+        let reinforceDelays: [TimeInterval]
+        if let armAfter {
+            reinforceDelays = [1.0, 3.0, 6.0, 12.0].filter { $0 < armAfter - 1 }
+        } else {
+            reinforceDelays = [1.0, 3.0, 6.0, 12.0]
+        }
+        for delay in reinforceDelays {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.webView.evaluateJavaScript(disableJS, completionHandler: nil)
+            }
+        }
+        if let armAfter {
+            if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let url = docs.appendingPathComponent("msa-app-promo-arm-scheduled.txt")
+                try? "scheduled armAfter=\(armAfter)\n".write(to: url, atomically: true, encoding: .utf8)
+            }
+            // Strong capture of enable JS; avoid relying solely on weak self for the arm fire.
+            let webView = self.webView
+            DispatchQueue.main.asyncAfter(deadline: .now() + armAfter) {
+                if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                    let url = docs.appendingPathComponent("msa-app-promo-arm.txt")
+                    try? "arm-fired evaluating enableJS\n".write(to: url, atomically: true, encoding: .utf8)
+                }
+                webView.evaluateJavaScript(enableJS) { result, error in
+                    let note: String
+                    if let error {
+                        note = "error:\(error.localizedDescription)"
+                    } else {
+                        note = String(describing: result ?? "nil")
+                    }
+                    if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+                        let url = docs.appendingPathComponent("msa-app-promo-arm.txt")
+                        try? "armed result=\(note)\n".write(to: url, atomically: true, encoding: .utf8)
+                    }
+                    NSLog("AppPromoHide: armed after %.1fs → %@", armAfter, note)
+                }
+                for delay in [0.5, 1.5, 3.0, 6.0] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        webView.evaluateJavaScript(enableJS, completionHandler: nil)
+                    }
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + armAfter + 1.0) { [weak self] in
+                self?.writeAppPromoDump()
+            }
+        }
     }
 
     private func applyStableCoverLaunchFlagsIfNeeded() {
@@ -689,6 +774,178 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-reels-nav-dump-\(suffix).json")
             try? body.write(to: url, atomically: true, encoding: .utf8)
             NSLog("MSA ReelsNavDump: wrote %@", url.lastPathComponent)
+        }
+    }
+
+    /// MSA-36 Tart soak (no device XCUITest):
+    /// `-ChaosAutoScroll` → JS window.scrollBy every 0.55s after settle
+    /// `-ChaosHeartbeat` → Documents/msa-chaos-heartbeat.json every 5s (alive proof)
+    func startChaosSoakIfRequested() {
+        let args = ProcessInfo.processInfo.arguments
+        let autoScroll = args.contains("-ChaosAutoScroll")
+        let heartbeat = args.contains("-ChaosHeartbeat") || autoScroll
+        guard autoScroll || heartbeat else { return }
+        chaosScrollStartedAt = Date()
+
+        if heartbeat {
+            chaosHeartbeatTimer?.invalidate()
+            let timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.writeChaosHeartbeat()
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            chaosHeartbeatTimer = timer
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.writeChaosHeartbeat()
+            }
+        }
+
+        guard autoScroll else { return }
+        // Wait for cover/feed settle, then scroll for ~3 minutes.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+            guard let self else { return }
+            self.chaosScrollTimer?.invalidate()
+            // Pause between scrolls so coalesce QUIET_MS can elapse (avoid permanent burst).
+            let timer = Timer.scheduledTimer(withTimeInterval: 1.35, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if let started = self.chaosScrollStartedAt,
+                       Date().timeIntervalSince(started) > 200 {
+                        self.chaosScrollTimer?.invalidate()
+                        self.chaosScrollTimer = nil
+                        return
+                    }
+                    // Instagram home feed scrolls an inner overflow container, not window.
+                    let js = #"""
+                    (function(){
+                      try {
+                        var dy = Math.max(480, Math.floor((window.innerHeight||800)*0.75));
+                        var nodes = document.querySelectorAll('main, [role="main"], div, section');
+                        var best = null, bestScore = 0;
+                        for (var i = 0; i < nodes.length; i++) {
+                          var el = nodes[i];
+                          var sh = el.scrollHeight || 0;
+                          var ch = el.clientHeight || 0;
+                          if (sh > ch + 120 && ch > 180) {
+                            var score = sh * (ch / (window.innerHeight || 1));
+                            if (score > bestScore) { best = el; bestScore = score; }
+                          }
+                        }
+                        if (best) {
+                          best.scrollTop = (best.scrollTop || 0) + dy;
+                          try { best.dispatchEvent(new Event('scroll', { bubbles: true })); } catch (e1) {}
+                          return 'el:' + Math.floor(best.scrollTop);
+                        }
+                        var se = document.scrollingElement || document.documentElement || document.body;
+                        if (se) {
+                          se.scrollTop = (se.scrollTop || 0) + dy;
+                          return 'se:' + Math.floor(se.scrollTop || 0);
+                        }
+                        window.scrollBy(0, dy);
+                        return 'win:' + Math.floor(window.scrollY || 0);
+                      } catch (e) { return String(e); }
+                    })()
+                    """#
+                    self.webView.evaluateJavaScript(js, completionHandler: nil)
+                }
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.chaosScrollTimer = timer
+        }
+    }
+
+    private func writeChaosHeartbeat() {
+        let age = chaosScrollStartedAt.map { Date().timeIntervalSince($0) } ?? -1
+        let pid = ProcessInfo.processInfo.processIdentifier
+        // Native line first — proves app process alive even if WK JS is wedged.
+        var native: [String: Any] = [
+            "ts": ISO8601DateFormatter().string(from: Date()),
+            "ageSec": Int(age),
+            "pid": pid,
+            "nativeAlive": true,
+            "urlHost": webView.url?.host ?? "",
+            "isLoading": webView.isLoading,
+            "title": webView.title ?? ""
+        ]
+        appendChaosHeartbeat(native)
+
+        let probe = #"""
+        (function(){
+          try {
+            var y = window.scrollY || 0;
+            try {
+              var nodes = document.querySelectorAll('main, [role="main"], div');
+              for (var i = 0; i < nodes.length; i++) {
+                var el = nodes[i];
+                if ((el.scrollHeight || 0) > (el.clientHeight || 0) + 120 && (el.clientHeight || 0) > 180) {
+                  if ((el.scrollTop || 0) > y) y = el.scrollTop || 0;
+                }
+              }
+            } catch (e0) {}
+            var promoVisible = [];
+            var promoCanary = null;
+            try {
+              if (window.__msaAppPromo && window.__msaAppPromo.dump) {
+                var d = window.__msaAppPromo.dump();
+                promoCanary = d.scriptCanary || null;
+                promoVisible = d.visiblePromoText || [];
+              }
+            } catch (e1) {}
+            return JSON.stringify({
+              alive: true,
+              href: location.href,
+              path: location.pathname,
+              y: Math.floor(y),
+              scrollBurst: !!window.__msaScrollBurst,
+              coalesce: !!window.__msaScrollCoalesceInstalled,
+              promoCanary: promoCanary,
+              promoVisible: promoVisible,
+              coverCanary: (window.__msaStableCover && window.__msaStableCover.dump && window.__msaStableCover.dump().scriptCanary) || null,
+              coverReady: !!(window.__msaStableCover && window.__msaStableCover.isReady && window.__msaStableCover.isReady())
+            });
+          } catch (e) {
+            return JSON.stringify({ alive: true, error: String(e) });
+          }
+        })()
+        """#
+        webView.evaluateJavaScript(probe) { [weak self] result, error in
+            var payload: [String: Any] = [
+                "ts": ISO8601DateFormatter().string(from: Date()),
+                "ageSec": Int(age),
+                "pid": pid,
+                "nativeAlive": true
+            ]
+            if let error {
+                payload["jsError"] = String(describing: error)
+            } else if let s = result as? String,
+                      let data = s.data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: data) {
+                payload["page"] = obj
+            } else {
+                payload["page"] = result as Any
+            }
+            self?.appendChaosHeartbeat(payload)
+            NSLog("MSA ChaosHeartbeat: age=%d", Int(age))
+        }
+    }
+
+    private func appendChaosHeartbeat(_ payload: [String: Any]) {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
+              let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+              let text = String(data: data, encoding: .utf8)
+        else { return }
+        let url = docs.appendingPathComponent("msa-chaos-heartbeat.json")
+        try? text.write(to: url, atomically: true, encoding: .utf8)
+        let lineURL = docs.appendingPathComponent("msa-chaos-heartbeat.log")
+        if let handle = try? FileHandle(forWritingTo: lineURL) {
+            defer { try? handle.close() }
+            handle.seekToEndOfFile()
+            if let line = (text + "\n").data(using: .utf8) {
+                handle.write(line)
+            }
+        } else {
+            try? (text + "\n").write(to: lineURL, atomically: true, encoding: .utf8)
         }
     }
 }

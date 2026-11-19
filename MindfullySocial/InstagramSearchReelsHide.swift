@@ -522,25 +522,32 @@ enum InstagramSearchReelsHide {
 
   var scheduled = null;
   function schedule() {
+    if (window.__msaScrollBurst) return;
     if (scheduled) return;
     scheduled = setTimeout(function () {
       scheduled = null;
+      if (window.__msaScrollBurst) return;
       applyBlank();
-    }, 60);
+    }, 180);
   }
 
   var mo = new MutationObserver(schedule);
   function start() {
     ensureStyle();
     applyBlank();
-    try {
-      mo.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['href', 'class', 'style', 'aria-label', 'value']
-      });
-    } catch (e) {}
+    var opts = {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['href', 'class', 'style', 'aria-label', 'value']
+    };
+    if (window.__msaRegisterMO) {
+      window.__msaRegisterMO(mo, function () { return document.documentElement; }, opts);
+    } else {
+      try {
+        mo.observe(document.documentElement, opts);
+      } catch (e) {}
+    }
   }
 
   if (document.documentElement) start();
@@ -566,7 +573,9 @@ enum InstagramSearchReelsHide {
       return ret;
     };
   } catch (e) {}
-  setInterval(applyBlank, 700);
+  setInterval(function () {
+    if (!window.__msaScrollBurst) applyBlank();
+  }, 1200);
 })();
 """#
 

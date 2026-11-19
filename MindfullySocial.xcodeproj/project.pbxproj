@@ -26,6 +26,7 @@
 		A10000000000000000000038 /* InstagramAIContentHide.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000039 /* InstagramAIContentHide.swift */; };
 		A1000000000000000000003A /* InstagramReelAutoOpenGuard.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003B /* InstagramReelAutoOpenGuard.swift */; };
 		A1000000000000000000003C /* InstagramStableCover.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003D /* InstagramStableCover.swift */; };
+		A1000000000000000000003E /* InstagramScrollCoalesce.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000003F /* InstagramScrollCoalesce.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 		A10000000000000000000039 /* InstagramAIContentHide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramAIContentHide.swift; sourceTree = "<group>"; };
 		A1000000000000000000003B /* InstagramReelAutoOpenGuard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramReelAutoOpenGuard.swift; sourceTree = "<group>"; };
 		A1000000000000000000003D /* InstagramStableCover.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramStableCover.swift; sourceTree = "<group>"; };
+		A1000000000000000000003F /* InstagramScrollCoalesce.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstagramScrollCoalesce.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -105,6 +107,7 @@
 				A1000000000000000000001E /* InstagramFeedHideTweaks.swift */,
 				A1000000000000000000001F /* InstagramAppPromoHide.swift */,
 				A1000000000000000000003D /* InstagramStableCover.swift */,
+				A1000000000000000000003F /* InstagramScrollCoalesce.swift */,
 				A10000000000000000000035 /* InstagramStoryAdSkip.swift */,
 				A10000000000000000000039 /* InstagramAIContentHide.swift */,
 				A1000000000000000000003B /* InstagramReelAutoOpenGuard.swift */,
@@ -243,6 +246,7 @@
 				A1000000000000000000000E /* InstagramFeedHideTweaks.swift in Sources */,
 				A1000000000000000000000F /* InstagramAppPromoHide.swift in Sources */,
 				A1000000000000000000003C /* InstagramStableCover.swift in Sources */,
+				A1000000000000000000003E /* InstagramScrollCoalesce.swift in Sources */,
 				A10000000000000000000034 /* InstagramStoryAdSkip.swift in Sources */,
 				A10000000000000000000038 /* InstagramAIContentHide.swift in Sources */,
 				A1000000000000000000003A /* InstagramReelAutoOpenGuard.swift in Sources */,

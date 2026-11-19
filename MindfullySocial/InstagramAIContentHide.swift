@@ -1001,25 +1001,32 @@ enum InstagramAIContentHide {
 
   var scheduled = null;
   function schedule() {
+    if (window.__msaScrollBurst) return;
     if (scheduled) return;
     scheduled = setTimeout(function () {
       scheduled = null;
+      if (window.__msaScrollBurst) return;
       applyAIHide();
-    }, 50);
+    }, 200);
   }
 
   var mo = new MutationObserver(schedule);
   function start() {
     ensureStyle();
     applyAIHide();
-    try {
-      mo.observe(document.documentElement, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['class', 'style', 'href', 'aria-label', 'title', 'alt', 'placeholder']
-      });
-    } catch (e) {}
+    var opts = {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'href', 'aria-label', 'title', 'alt', 'placeholder']
+    };
+    if (window.__msaRegisterMO) {
+      window.__msaRegisterMO(mo, function () { return document.documentElement; }, opts);
+    } else {
+      try {
+        mo.observe(document.documentElement, opts);
+      } catch (e) {}
+    }
   }
 
   if (document.documentElement) start();
@@ -1043,9 +1050,20 @@ enum InstagramAIContentHide {
   window.addEventListener('popstate', schedule);
   window.addEventListener('hashchange', schedule);
   window.addEventListener('resize', schedule);
-  window.addEventListener('scroll', schedule, { passive: true });
+  // Scroll coalesced via InstagramScrollCoalesce flush (MSA-36).
   document.addEventListener('visibilitychange', schedule);
-  setInterval(applyAIHide, 700);
+  try {
+    var prevFlush = window.__msaFlushAfterScroll;
+    window.__msaFlushAfterScroll = function () {
+      try {
+        if (typeof prevFlush === 'function') prevFlush();
+      } catch (e2) {}
+      schedule();
+    };
+  } catch (e3) {}
+  setInterval(function () {
+    if (!window.__msaScrollBurst) applyAIHide();
+  }, 1200);
 })();
 """#
 

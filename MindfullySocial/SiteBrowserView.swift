@@ -82,6 +82,7 @@ struct SiteBrowserView: View {
             model.startAIHideProbeIfRequested()
             model.startReelGuardProbeIfRequested()
             model.startReelsNavProbeIfRequested()
+            model.startChaosSoakIfRequested()
             UsageTimeStore.beginSession(for: site.id)
             model.load(url: resolveLaunchURL(for: site))
             model.startExploreDumpIfRequested()

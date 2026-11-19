@@ -229,16 +229,20 @@ enum InstagramStableCover {
     try {
       if (mo) return;
       mo = new MutationObserver(function () {
+        if (window.__msaScrollBurst) return;
         bumpMutation();
       });
-      var target = document.documentElement || document.body;
-      if (target) {
-        mo.observe(target, {
-          childList: true,
-          subtree: true,
-          attributes: false,
-          characterData: false
-        });
+      var opts = {
+        childList: true,
+        subtree: true,
+        attributes: false,
+        characterData: false
+      };
+      if (window.__msaRegisterMO) {
+        window.__msaRegisterMO(mo, function () { return document.documentElement || document.body; }, opts);
+      } else {
+        var target = document.documentElement || document.body;
+        if (target) mo.observe(target, opts);
       }
     } catch (e) {}
   }
