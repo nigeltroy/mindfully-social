@@ -44,14 +44,26 @@ struct SiteBrowserView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                     .allowsHitTesting(false)
             }
+
+            // MSA-32: soft-dark cover until first stable paint after IG script injections.
+            if model.showStableCover {
+                Color(white: 0.11)
+                    .ignoresSafeArea()
+                    .accessibilityIdentifier("browserStableCover")
+                    .accessibilityLabel("Loading Instagram")
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(white: 0.11))
         // Full-bleed into top and bottom safe areas (Instagram/YouTube chrome owns insets).
         .ignoresSafeArea()
         .preferredColorScheme(.dark)
+        .animation(.easeOut(duration: 0.28), value: model.showStableCover)
         .onAppear {
             model.installSiteTweaks(for: site.id)
+            model.beginStableCoverIfNeeded(for: site.id)
             model.startFeedHideProbeIfRequested()
             model.startAppPromoProbeIfRequested()
             model.startStoryAdSkipProbeIfRequested()

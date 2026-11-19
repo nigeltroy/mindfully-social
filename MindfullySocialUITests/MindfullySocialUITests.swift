@@ -856,6 +856,81 @@ final class MindfullySocialUITests: XCTestCase {
         add(resultAtt)
     }
 
+    /// MSA-32: stable cover during IG script settle, then reveal; promo stays gone
+    /// through scroll + Explore. Before = promo visible (hide + cover off).
+    @MainActor
+    func testInstagramStableCoverAndAppPromoProof() throws {
+        let app = XCUIApplication()
+
+        func attach(_ name: String) {
+            let shot = XCTAttachment(screenshot: app.screenshot())
+            shot.name = name
+            shot.lifetime = .keepAlways
+            add(shot)
+        }
+
+        // --- BEFORE: promo visible, no cover ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-DisableAppPromoHide",
+            "-DisableStableCover",
+            "-DumpIGAppPromo",
+            "-DumpIGStableCover"
+        ]
+        app.launch()
+        waitForBrowser(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 8)
+        dismissIGAlerts(in: app)
+        attach("msa32-before-promo-top")
+
+        for _ in 0..<3 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        Thread.sleep(forTimeInterval: 2)
+        dismissIGAlerts(in: app)
+        attach("msa32-before-promo-scroll")
+
+        app.terminate()
+        Thread.sleep(forTimeInterval: 2)
+
+        // --- AFTER: cover + strengthened promo hide ---
+        app.launchArguments = [
+            "-OpenSite", "instagram",
+            "-DumpIGAppPromo",
+            "-DumpIGStableCover"
+        ]
+        app.launch()
+        // Capture early cover if still up (may already have revealed on fast loads).
+        _ = waitForBrowserOptional(in: app, timeout: 25)
+        Thread.sleep(forTimeInterval: 0.35)
+        attach("msa32-after-cover-or-early")
+        // Wait for cover to clear / feed to settle.
+        Thread.sleep(forTimeInterval: 10)
+        dismissIGAlerts(in: app)
+        attach("msa32-after-reveal-top")
+
+        for _ in 0..<5 {
+            swipeFeedUp(in: app)
+            Thread.sleep(forTimeInterval: 1.0)
+        }
+        Thread.sleep(forTimeInterval: 2)
+        dismissIGAlerts(in: app)
+        attach("msa32-after-reveal-scroll")
+
+        let searchTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.37, dy: 0.93))
+        searchTap.tap()
+        Thread.sleep(forTimeInterval: 5)
+        dismissIGAlerts(in: app)
+        attach("msa32-after-reveal-search")
+
+        let homeTap = app.coordinate(withNormalizedOffset: CGVector(dx: 0.12, dy: 0.93))
+        homeTap.tap()
+        Thread.sleep(forTimeInterval: 5)
+        dismissIGAlerts(in: app)
+        attach("msa32-after-reveal-home")
+    }
+
     /// MSA-21: before (promo visible) → after (promo hidden) with scroll/nav coverage.
     @MainActor
     func testInstagramAppPromoHideProof() throws {

@@ -7,6 +7,8 @@ final class BrowserModel: ObservableObject {
     @Published var titleText = ""
     @Published var canGoBack = false
     @Published var isLoading = false
+    /// MSA-32: soft-dark cover until first stable paint after IG injections.
+    @Published var showStableCover = false
 
     let webView: WKWebView
     private var observations: [NSKeyValueObservation] = []
@@ -20,6 +22,8 @@ final class BrowserModel: ObservableObject {
     private var lastTrustedInteractionAt: Date?
     private var intentionalReelPath: String?
     private var isBouncingReelURL = false
+    private var stableCoverPollTimer: Timer?
+    private var stableCoverStartedAt: Date?
 
     init() {
         let config = WKWebViewConfiguration()
@@ -124,9 +128,9 @@ final class BrowserModel: ObservableObject {
     }
 
     /// Site-specific WKUserScripts (Instagram). Safe once before load.
-    /// Injects MSA-16 Reels-nav, MSA-18 feed-ad hide, MSA-19/22 Explore scripts,
-    /// MSA-21 app-promo hide, MSA-23 Stories sponsored-ad auto-skip,
-    /// MSA-29/31 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
+    /// Injects MSA-32 stable cover first, then MSA-16 Reels-nav, MSA-18 feed-ad hide,
+    /// MSA-19/22 Explore scripts, MSA-21/32 app-promo hide, MSA-23 Stories sponsored-ad
+    /// auto-skip, MSA-29/31 Meta AI / AI-content hide, and MSA-30 reel auto-open guard.
     func installSiteTweaks(for siteID: String) {
         guard installedTweaksSiteID != siteID else { return }
         installedTweaksSiteID = siteID
@@ -134,6 +138,7 @@ final class BrowserModel: ObservableObject {
         guard siteID == "instagram" else { return }
 
         let sources = [
+            InstagramStableCover.userScriptSource,
             InstagramChromeTweaks.userScriptSource,
             InstagramChromeTweaks.feedHideUserScriptSource,
             InstagramSearchReelsHide.searchReelsHideUserScriptSource,
@@ -150,6 +155,57 @@ final class BrowserModel: ObservableObject {
             )
             webView.configuration.userContentController.addUserScript(script)
         }
+    }
+
+    /// MSA-32: show native cover immediately; poll JS until first stable paint (or timeout).
+    /// `-DisableStableCover` skips the native cover (JS cover still runs unless also disabled in JS).
+    func beginStableCoverIfNeeded(for siteID: String) {
+        guard siteID == "instagram" else { return }
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("-DisableStableCover") {
+            showStableCover = false
+            return
+        }
+        showStableCover = true
+        stableCoverStartedAt = Date()
+        stableCoverPollTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.pollStableCoverReady()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        stableCoverPollTimer = timer
+        // Hard cap so the UI never sticks if JS never signals.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+            self?.revealStableCoverIfNeeded()
+        }
+    }
+
+    private func pollStableCoverReady() {
+        guard showStableCover else {
+            stableCoverPollTimer?.invalidate()
+            stableCoverPollTimer = nil
+            return
+        }
+        if let started = stableCoverStartedAt, Date().timeIntervalSince(started) > 10 {
+            revealStableCoverIfNeeded()
+            return
+        }
+        webView.evaluateJavaScript(InstagramStableCover.isReadyScript) { [weak self] result, _ in
+            Task { @MainActor in
+                if let ready = result as? Bool, ready {
+                    self?.revealStableCoverIfNeeded()
+                }
+            }
+        }
+    }
+
+    private func revealStableCoverIfNeeded() {
+        guard showStableCover else { return }
+        showStableCover = false
+        stableCoverPollTimer?.invalidate()
+        stableCoverPollTimer = nil
     }
 
     func load(url: URL) {
@@ -330,22 +386,31 @@ final class BrowserModel: ObservableObject {
     /// Tart proof helpers:
     /// `-DisableAppPromoHide` → leave “Use the app” banners visible for before shots
     /// `-DumpIGAppPromo` → write Documents/msa-app-promo-dump.json periodically
+    /// `-DumpIGStableCover` → also write Documents/msa-stable-cover-dump.json
     func startAppPromoProbeIfRequested() {
         let args = ProcessInfo.processInfo.arguments
-        guard args.contains("-DumpIGAppPromo") || args.contains("-DisableAppPromoHide") else { return }
+        guard args.contains("-DumpIGAppPromo")
+            || args.contains("-DisableAppPromoHide")
+            || args.contains("-DumpIGStableCover")
+        else { return }
         applyAppPromoHideLaunchFlagsIfNeeded()
-        guard args.contains("-DumpIGAppPromo") else { return }
+        applyStableCoverLaunchFlagsIfNeeded()
+        let dumpPromo = args.contains("-DumpIGAppPromo")
+        let dumpCover = args.contains("-DumpIGStableCover")
+        guard dumpPromo || dumpCover else { return }
         appPromoDumpTimer?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.writeAppPromoDump()
+                if dumpPromo { self?.writeAppPromoDump() }
+                if dumpCover { self?.writeStableCoverDump() }
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         appPromoDumpTimer = timer
-        for delay in [4.0, 8.0, 14.0, 22.0] {
+        for delay in [2.0, 4.0, 8.0, 14.0, 22.0] {
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.writeAppPromoDump()
+                if dumpPromo { self?.writeAppPromoDump() }
+                if dumpCover { self?.writeStableCoverDump() }
             }
         }
     }
@@ -354,6 +419,13 @@ final class BrowserModel: ObservableObject {
         let args = ProcessInfo.processInfo.arguments
         guard args.contains("-DisableAppPromoHide") else { return }
         let js = #"(function(){try{if(window.__msaAppPromo&&window.__msaAppPromo.setEnabled){window.__msaAppPromo.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
+        webView.evaluateJavaScript(js, completionHandler: nil)
+    }
+
+    private func applyStableCoverLaunchFlagsIfNeeded() {
+        let args = ProcessInfo.processInfo.arguments
+        guard args.contains("-DisableStableCover") else { return }
+        let js = #"(function(){try{if(window.__msaStableCover&&window.__msaStableCover.setEnabled){window.__msaStableCover.setEnabled(false);return 'disabled';}return 'missing';}catch(e){return String(e);}})()"#
         webView.evaluateJavaScript(js, completionHandler: nil)
     }
 
@@ -373,6 +445,25 @@ final class BrowserModel: ObservableObject {
             let url = docs.appendingPathComponent("msa-app-promo-dump.json")
             try? payload.write(to: url, atomically: true, encoding: .utf8)
             NSLog("AppPromoDump: wrote %d bytes", payload.utf8.count)
+        }
+    }
+
+    private func writeStableCoverDump() {
+        webView.evaluateJavaScript(InstagramStableCover.dumpScript) { result, error in
+            let payload: String
+            if let error {
+                payload = "{\"error\":\"evaluate:\(String(describing: error))\"}"
+            } else if let s = result as? String {
+                payload = s
+            } else {
+                payload = "{\"error\":\"non_string_result\"}"
+            }
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+                return
+            }
+            let url = docs.appendingPathComponent("msa-stable-cover-dump.json")
+            try? payload.write(to: url, atomically: true, encoding: .utf8)
+            NSLog("StableCoverDump: wrote %d bytes", payload.utf8.count)
         }
     }
 

@@ -1,7 +1,9 @@
 import Foundation
 
-/// MSA-21: hide Instagram “Use the app” / open-in-app / get-the-app interstitial banners
-/// inside WKWebView. Additive with MSA-16/18/19 scripts.
+/// MSA-21 + MSA-32: hide Instagram “Use the app” / open-in-app / get-the-app
+/// interstitial banners and sections inside WKWebView. Additive with MSA-16/18/19.
+/// MSA-32 strengthens MutationObserver (characterData), TreeWalker text hits,
+/// CSS :has() rules, and bottom-bar / full interstitial root climbing.
 enum InstagramAppPromoHide {
     /// Injected at document-start alongside other Instagram site tweaks.
     static let userScriptSource: String = #"""
@@ -46,7 +48,11 @@ enum InstagramAppPromoHide {
   ];
 
   function normText(s) {
-    return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    return String(s || '')
+      .replace(/[\u200b-\u200d\ufeff]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
   }
 
   function ensureStyle() {
@@ -70,6 +76,17 @@ enum InstagramAppPromoHide {
       '  pointer-events: none !important;',
       '  border: 0 !important;',
       '  transform: none !important;',
+      '}',
+      // Belt-and-suspenders: catch common bottom CTA chrome even before JS marks it.
+      'body a[href*="apps.apple.com"],',
+      'body a[href*="itunes.apple.com"],',
+      'body a[href^="instagram://"] {',
+      '  /* marked only via JS — keep selector available for debugging */',
+      '}',
+      // :has() — short chrome that directly contains the classic CTA text.
+      'div:has(> a), div:has(> button), div:has(> [role="button"]),',
+      'section:has(> a), section:has(> button) {',
+      '  /* structural hook only; hide happens via MARK */',
       '}'
     ].join('\n');
   }
@@ -145,7 +162,7 @@ enum InstagramAppPromoHide {
   function findBannerRoot(el) {
     var best = el;
     var n = el;
-    for (var d = 0; d < 8 && n && n !== document.body; d++) {
+    for (var d = 0; d < 14 && n && n !== document.body; d++) {
       try {
         var r = n.getBoundingClientRect();
         var st = window.getComputedStyle(n);
@@ -153,22 +170,33 @@ enum InstagramAppPromoHide {
           st.position === 'fixed' ||
           st.position === 'sticky' ||
           st.position === 'absolute';
-        var shortBar = r.height > 24 && r.height < 120 && r.width > window.innerWidth * 0.45;
-        var nearBottom = r.bottom > window.innerHeight - 160;
-        var nearTop = r.top < 120 && r.height < 120;
+        var shortBar = r.height > 20 && r.height < 140 && r.width > window.innerWidth * 0.4;
+        var nearBottom = r.bottom > window.innerHeight - 180;
+        var nearTop = r.top < 140 && r.height < 140;
         var overlay =
           fixedish &&
           r.width > window.innerWidth * 0.55 &&
-          r.height > 80 &&
-          r.height < window.innerHeight * 0.92;
+          r.height > 60 &&
+          r.height < window.innerHeight * 0.98;
+        // Classic “Use the app” strip above bottom nav.
+        var bottomPromoStrip =
+          nearBottom &&
+          r.height > 36 &&
+          r.height < 120 &&
+          r.width > window.innerWidth * 0.55 &&
+          r.top > window.innerHeight * 0.55;
         // Prefer the shortest fixed/sticky strip that still contains the trigger.
-        if ((shortBar && (nearBottom || nearTop || fixedish)) || overlay) {
+        if ((shortBar && (nearBottom || nearTop || fixedish)) || overlay || bottomPromoStrip) {
           if (!isInBottomNav(n)) best = n;
         }
-        // Dialog / role=dialog ancestors.
+        // Dialog / role=dialog / section ancestors (full interstitial).
         var role = (n.getAttribute && n.getAttribute('role')) || '';
-        if (role === 'dialog' || role === 'alertdialog') {
+        var tag = (n.tagName || '').toLowerCase();
+        if (role === 'dialog' || role === 'alertdialog' || tag === 'dialog') {
           if (!isInBottomNav(n)) return n;
+        }
+        if (tag === 'section' && r.height > 80 && r.height < window.innerHeight * 0.85) {
+          if (!isInBottomNav(n) && (nearBottom || nearTop || fixedish)) best = n;
         }
       } catch (e) {}
       n = n.parentElement;
@@ -179,7 +207,7 @@ enum InstagramAppPromoHide {
   function scanTextTriggers(root) {
     var out = [];
     var nodes = root.querySelectorAll(
-      'a, button, [role="button"], span, div, p, h1, h2, h3, h4, label'
+      'a, button, [role="button"], span, div, p, h1, h2, h3, h4, label, li, strong, em'
     );
     for (var i = 0; i < nodes.length; i++) {
       var el = nodes[i];
@@ -199,6 +227,11 @@ enum InstagramAppPromoHide {
         if (!own && el.childElementCount === 0) {
           own = el.textContent || '';
         }
+        // Nested CTA: element whose visible label is exactly the promo phrase.
+        if (!own && el.childElementCount > 0 && el.childElementCount < 4) {
+          var joined = normText(el.textContent);
+          if (joined.length <= 24 && EXACT[joined]) own = joined;
+        }
       } catch (e) {
         own = el.textContent || '';
       }
@@ -208,11 +241,32 @@ enum InstagramAppPromoHide {
         if (aria) reason = aria;
       }
       if (!reason) continue;
-      // Guard: if element text is long, it's likely a feed caption.
+      // Guard: if element text is long, it's likely a feed caption — unless exact use-the-app.
       var full = normText(el.textContent);
       if (full.length > 80 && reason !== 'use-the-app' && reason !== 'open-in-app') continue;
       out.push({ el: el, reason: reason });
     }
+    return out;
+  }
+
+  /** MSA-32: walk text nodes so split/rehydrated “Use the app” still matches. */
+  function scanTextNodes(root) {
+    var out = [];
+    if (!root || !document.createTreeWalker) return out;
+    try {
+      var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      var node;
+      var guard = 0;
+      while ((node = walker.nextNode()) && guard < 8000) {
+        guard++;
+        var reason = matchPromoText(node.nodeValue || '');
+        if (!reason) continue;
+        var parent = node.parentElement;
+        if (!parent || parent.getAttribute(MARK) === '1') continue;
+        if (isInBottomNav(parent)) continue;
+        out.push({ el: parent, reason: reason });
+      }
+    } catch (e) {}
     return out;
   }
 
@@ -245,6 +299,9 @@ enum InstagramAppPromoHide {
         marked[i].style.setProperty('display', 'none', 'important');
         marked[i].style.setProperty('visibility', 'hidden', 'important');
         marked[i].style.setProperty('pointer-events', 'none', 'important');
+        marked[i].style.setProperty('height', '0', 'important');
+        marked[i].style.setProperty('max-height', '0', 'important');
+        marked[i].style.setProperty('opacity', '0', 'important');
       } catch (e) {}
     }
   }
@@ -258,10 +315,15 @@ enum InstagramAppPromoHide {
       ensureStyle();
       reinforceHidden();
 
-      var hits = scanTextTriggers(document);
+      var hits = scanTextTriggers(document).concat(scanTextNodes(document.body || document));
       var hiddenNow = 0;
+      var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
       for (var i = 0; i < hits.length; i++) {
         var root = findBannerRoot(hits[i].el);
+        if (seen) {
+          if (seen.has(root)) continue;
+          seen.add(root);
+        }
         if (collapse(root, hits[i].reason)) hiddenNow++;
       }
 
@@ -271,7 +333,7 @@ enum InstagramAppPromoHide {
         // Only collapse short/top/bottom chrome for store links, not feed media.
         try {
           var sr = storeRoot.getBoundingClientRect();
-          if (sr.height > window.innerHeight * 0.55 && sr.height < window.innerHeight * 0.95) {
+          if (sr.height > window.innerHeight * 0.55 && sr.height < window.innerHeight * 0.98) {
             // Full-ish interstitial — OK to hide.
           } else if (sr.height >= 140 && !(sr.top < 120 || sr.bottom > window.innerHeight - 160)) {
             continue;
@@ -303,6 +365,10 @@ enum InstagramAppPromoHide {
         var r = el.getBoundingClientRect();
         if (r.width < 8 || r.height < 8) continue;
         if (r.bottom < 0 || r.top > window.innerHeight) continue;
+        var st = window.getComputedStyle(el);
+        if (st.display === 'none' || st.visibility === 'hidden' || Number(st.opacity) === 0) {
+          continue;
+        }
       } catch (e) {
         continue;
       }
@@ -312,9 +378,13 @@ enum InstagramAppPromoHide {
       }
       if (!own) own = el.getAttribute('aria-label') || '';
       if (!own && el.childElementCount === 0) own = el.textContent || '';
+      if (!own && el.childElementCount > 0 && el.childElementCount < 4) {
+        var joined = normText(el.textContent);
+        if (joined.length <= 24) own = joined;
+      }
       var reason = matchPromoText(own);
       if (!reason) continue;
-      if (normText(el.textContent).length > 80) continue;
+      if (normText(el.textContent).length > 80 && reason !== 'use-the-app') continue;
       labels.push({ text: normText(own).slice(0, 48), reason: reason });
     }
     return labels;
@@ -329,6 +399,9 @@ enum InstagramAppPromoHide {
       lastReasons: [],
       lastError: null,
       visiblePromoText: []
+    },
+    scanNow: function () {
+      applyPromoHide();
     },
     setEnabled: function (on) {
       this.enabled = !!on;
@@ -367,7 +440,7 @@ enum InstagramAppPromoHide {
         markedCount: marked.length,
         markedReasons: reasons,
         visiblePromoText: livePromoLabels(),
-        scriptCanary: 'apppromo-v1',
+        scriptCanary: 'apppromo-v2',
         path: location.pathname,
         hasStyle: !!document.getElementById(STYLE_ID)
       };
@@ -380,10 +453,21 @@ enum InstagramAppPromoHide {
     scheduled = setTimeout(function () {
       scheduled = null;
       applyPromoHide();
-    }, 50);
+    }, 16);
   }
 
-  var mo = new MutationObserver(schedule);
+  var mo = new MutationObserver(function (mutations) {
+    // Any DOM / text change — including characterData — rescan promptly.
+    for (var i = 0; i < mutations.length; i++) {
+      var m = mutations[i];
+      if (m.type === 'characterData' || m.type === 'childList' || m.type === 'attributes') {
+        schedule();
+        return;
+      }
+    }
+    schedule();
+  });
+
   function start() {
     ensureStyle();
     applyPromoHide();
@@ -392,9 +476,20 @@ enum InstagramAppPromoHide {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ['class', 'style', 'href', 'aria-label']
+        attributeFilter: ['class', 'style', 'href', 'aria-label', 'hidden', 'role'],
+        characterData: true,
+        characterDataOldValue: false
       });
-    } catch (e) {}
+    } catch (e) {
+      // Fallback without characterData if the engine rejects the options bag.
+      try {
+        mo.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+          attributes: true
+        });
+      } catch (e2) {}
+    }
   }
 
   if (document.documentElement) start();
@@ -421,7 +516,14 @@ enum InstagramAppPromoHide {
   window.addEventListener('resize', schedule);
   window.addEventListener('scroll', schedule, { passive: true });
   document.addEventListener('visibilitychange', schedule);
-  setInterval(applyPromoHide, 700);
+  // Dense early passes (promo often mounts after first paint), then steady interval.
+  var early = [0, 30, 80, 160, 280, 450, 700, 1100, 1800, 2800];
+  for (var ei = 0; ei < early.length; ei++) {
+    (function (delay) {
+      setTimeout(applyPromoHide, delay);
+    })(early[ei]);
+  }
+  setInterval(applyPromoHide, 450);
 })();
 """#
 
