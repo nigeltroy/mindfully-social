@@ -947,58 +947,24 @@ final class MindfullySocialUITests: XCTestCase {
             add(shot)
         }
 
-        func ensureLoggedInIfNeeded() {
-            dismissIGAlerts(in: app)
-            guard let creds = instagramCredentials() else { return }
-            let loginPred = NSPredicate(format: "label ==[c] %@", "Log in")
-            let loginLink = app.descendants(matching: .any).matching(loginPred).firstMatch
-            guard loginLink.waitForExistence(timeout: 4) else { return }
-            if loginLink.isHittable { loginLink.tap() }
-            Thread.sleep(forTimeInterval: 3)
-            dismissIGAlerts(in: app)
-            let web = app.webViews.firstMatch
-            guard web.waitForExistence(timeout: 8) else { return }
-            let userField = web.textFields.firstMatch
-            guard userField.waitForExistence(timeout: 8) else { return }
-            userField.tap()
-            userField.typeText(creds.username)
-            let passField = web.secureTextFields.firstMatch
-            if passField.waitForExistence(timeout: 5) {
-                passField.tap()
-                passField.typeText(creds.password)
+        func openInstagramProfile(_ path: String, extraArgs: [String]) {
+            app.launchArguments = ["-OpenSite", "instagram", "-OpenPath", path] + extraArgs
+            app.launch()
+            // Prefer OpenSite sheet; fall back to tapping the Instagram home row.
+            if !waitForBrowserOptional(in: app, timeout: 20) {
+                let row = app.buttons["site-instagram"]
+                if row.waitForExistence(timeout: 8), row.isHittable {
+                    row.tap()
+                }
+                XCTAssertTrue(waitForBrowserOptional(in: app, timeout: 25),
+                              "Instagram browser did not open for \(path)")
             }
-            let loginBtn = app.descendants(matching: .any).matching(loginPred).firstMatch
-            if loginBtn.waitForExistence(timeout: 3), loginBtn.isHittable {
-                loginBtn.tap()
-            }
-            Thread.sleep(forTimeInterval: 12)
+            Thread.sleep(forTimeInterval: 10)
             dismissIGAlerts(in: app)
         }
 
         // --- BEFORE: AI hide disabled on @kumarmethod ---
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/kumarmethod/",
-            "-DisableAIHide",
-            "-DumpIGAI"
-        ]
-        app.launch()
-        waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 10)
-        ensureLoggedInIfNeeded()
-        // Re-open profile if login bounced us to home feed.
-        app.terminate()
-        Thread.sleep(forTimeInterval: 2)
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/kumarmethod/",
-            "-DisableAIHide",
-            "-DumpIGAI"
-        ]
-        app.launch()
-        waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 12)
-        dismissIGAlerts(in: app)
+        openInstagramProfile("/kumarmethod/", extraArgs: ["-DisableAIHide", "-DumpIGAI"])
         attach("ai-hide-before-kumarmethod-top")
 
         for _ in 0..<5 {
@@ -1013,16 +979,7 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
 
         // --- AFTER: hide enabled + simulate markers on @kumarmethod ---
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/kumarmethod/",
-            "-DumpIGAI",
-            "-SimulateAIContent"
-        ]
-        app.launch()
-        waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 12)
-        dismissIGAlerts(in: app)
+        openInstagramProfile("/kumarmethod/", extraArgs: ["-DumpIGAI", "-SimulateAIContent"])
         // Hold so -SimulateAIContent can plant then hide (2.2s delay).
         Thread.sleep(forTimeInterval: 5)
         attach("ai-hide-after-kumarmethod-top")
@@ -1039,16 +996,7 @@ final class MindfullySocialUITests: XCTestCase {
         Thread.sleep(forTimeInterval: 2)
 
         // --- AFTER: @techroastshow profile (second AI-content source) ---
-        app.launchArguments = [
-            "-OpenSite", "instagram",
-            "-OpenPath", "/techroastshow/",
-            "-DumpIGAI",
-            "-SimulateAIContent"
-        ]
-        app.launch()
-        waitForBrowser(in: app, timeout: 25)
-        Thread.sleep(forTimeInterval: 12)
-        dismissIGAlerts(in: app)
+        openInstagramProfile("/techroastshow/", extraArgs: ["-DumpIGAI", "-SimulateAIContent"])
         Thread.sleep(forTimeInterval: 5)
         attach("ai-hide-after-techroastshow-top")
 
@@ -1074,18 +1022,28 @@ final class MindfullySocialUITests: XCTestCase {
         attach("ai-hide-after-home")
 
         // Keep process alive so -DumpIGAI timers flush.
-        Thread.sleep(forTimeInterval: 8)
+        Thread.sleep(forTimeInterval: 10)
+    }
+
+    @MainActor
+    private func waitForBrowserOptional(in app: XCUIApplication, timeout: TimeInterval = 25) -> Bool {
+        let web = app.otherElements["browserWebView"]
+        if web.waitForExistence(timeout: timeout) { return true }
+        let tip = app.staticTexts["browserSwipeTip"]
+        if tip.waitForExistence(timeout: 2) { return true }
+        return app.webViews.firstMatch.waitForExistence(timeout: 5)
     }
 
     @MainActor
     private func waitForBrowser(in app: XCUIApplication, timeout: TimeInterval = 25) {
+        // Prefer named WKWebView query (MSA-28); fall back to optional helpers.
         let namedWeb = app.webViews["browserWebView"]
         let otherWeb = app.otherElements["browserWebView"]
         let tip = app.staticTexts["browserSwipeTip"]
         let ready = namedWeb.waitForExistence(timeout: timeout)
             || otherWeb.waitForExistence(timeout: 2)
             || tip.waitForExistence(timeout: 2)
-            || app.webViews.firstMatch.waitForExistence(timeout: 5)
+            || waitForBrowserOptional(in: app, timeout: 5)
         XCTAssertTrue(ready, "zero-chrome browser did not appear")
     }
 
